@@ -20,7 +20,7 @@ app.add_middleware(
 )
 
 # --- CONFIGURACIÓN ---
-EXCEL_PATH = r"C:\Users\1030650138\OneDrive - Colombiana de Comercio S.A\base actas de entrega.xlsx"
+EXCEL_PATH = r"C:\Users\POLLO\OneDrive - Colombiana de Comercio S.A\base actas de entrega.xlsx"
 PDF_FOLDER = "PDFs"
 os.makedirs(PDF_FOLDER, exist_ok=True)
 
@@ -34,6 +34,7 @@ class DatosActa(BaseModel):
     IMEI1: Optional[str] = ""
     IMEI2: Optional[str] = ""
     MODELO: Optional[str] = ""
+    marca: Optional[str] = ""
     C_Costos: Optional[str] = ""        # "C. Costos" → C_Costos (FastAPI/Pydantic)
     Supervisor: Optional[str] = ""
     Zona_o_Cargo: Optional[str] = ""    # "Zona o Cargo" → Zona_o_Cargo
@@ -88,7 +89,7 @@ def agregar_fila_excel(datos: DatosActa, ruta_pdf: str):
             datos.Telefono,                 # B
             datos.IMEI1,                    # C
             datos.IMEI2,                    # D
-            datos.MODELO,                   # E
+            datos.marca,                    # E  
             datos.C_Costos,                 # F
             fecha_hoy,                      # G - Fecha Asignacion
             "",                             # H - UN2 (vacío)
@@ -145,13 +146,15 @@ async def recibir_acta(datos: DatosActa):
         return {"mensaje": "OK: PDF guardado y Excel actualizado"}
 
     except Exception as e:
+        import traceback
         print(f"Error procesando acta: {e}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # --- ARCHIVOS ESTÁTICOS (equivalente a ArchivoEstatico en Java) ---
 # Sirve la carpeta actual como archivos estáticos (HTML, CSS, JS, imágenes)
-app.mount("/", StaticFiles(directory=".", html=True), name="static")
+app.mount("/", StaticFiles(directory="templates", html=True), name="static")
 
 
 # --- ARRANQUE DEL SERVIDOR ---
