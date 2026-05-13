@@ -81,6 +81,7 @@ document.getElementById('formActa').addEventListener('submit', async (event) => 
         Funcionario:   campos.get('Funcionario')  || "",
         Cedula:        campos.get('Cedula')        || "",
         MODELO:        campos.get('MODELO')        || "",
+        marca:         campos.get('marca')         || "",
         IMEI1:         campos.get('IMEI1')         || "",
         IMEI2:         campos.get('IMEI2')         || "",
         Telefono:      campos.get('Telefono')      || "",
@@ -96,4 +97,8 @@ document.getElementById('formActa').addEventListener('submit', async (event) => 
 
     // Envía los datos a Python
     await enviarDatos(datos);
+    alert('Acta guardada correctamente.');
+    document.getElementById('formActa').reset();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    inputFirma.value = "";
 });

@@ -20,7 +20,7 @@ app.add_middleware(
 )
 
 # --- CONFIGURACIÓN ---
-EXCEL_PATH = r"C:\Users\POLLO\OneDrive - Colombiana de Comercio S.A\base actas de entrega.xlsx"
+EXCEL_PATH = r"C:\Users\1030650138\OneDrive - Colombiana de Comercio S.A\base actas de entrega.xlsx"
 PDF_FOLDER = "PDFs"
 os.makedirs(PDF_FOLDER, exist_ok=True)
 
@@ -89,7 +89,7 @@ def agregar_fila_excel(datos: DatosActa, ruta_pdf: str):
             datos.Telefono,                 # B
             datos.IMEI1,                    # C
             datos.IMEI2,                    # D
-            datos.marca,                    # E  
+            f"{datos.marca} - {datos.MODELO}",   # E
             datos.C_Costos,                 # F
             fecha_hoy,                      # G - Fecha Asignacion
             "",                             # H - UN2 (vacío)
