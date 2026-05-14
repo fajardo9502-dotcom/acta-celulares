@@ -93,7 +93,7 @@ def agregar_fila_excel(datos: DatosActa, ruta_pdf: str):
             datos.C_Costos,                 # F
             fecha_hoy,                      # G - Fecha Asignacion
             "",                             # H - UN2 (vacío)
-            datos.Zona_o_Cargo,             # I - UN
+            "",                             # I - UN
             datos.Supervisor,               # J
             datos.Zona_o_Cargo,             # K
             datos.Codigo,                   # L
@@ -102,7 +102,7 @@ def agregar_fila_excel(datos: DatosActa, ruta_pdf: str):
             datos.Bateria,                  # O
             datos.Cargador,                 # P
             datos.TipoEquipo,               # Q
-            "Activo",                       # R
+            "",                       # R
             datos.Novedades,                # S
             "Activo",                       # T
             "",                             # U (vacío)

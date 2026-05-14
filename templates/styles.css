@@ -83,3 +83,8 @@ button {
     padding: 0;
     line-height: 1;
 }
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
