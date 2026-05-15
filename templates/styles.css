@@ -109,3 +109,11 @@ input {
     box-shadow: none !important;
     outline: none !important;
 }
+.esconder-codigo {
+    position: absolute;
+    left: -9999px; /* Lo manda fuera de la pantalla para que nadie lo vea */
+    opacity: 0;    /* Lo hace totalmente transparente */
+    height: 0;
+    width: 0;
+    pointer-events: none; /* Nadie puede tocarlo por error */
+}

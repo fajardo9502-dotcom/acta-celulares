@@ -36,18 +36,27 @@ async function generarPDF() {
     const paginas = document.getElementById('formActa').querySelectorAll('.pagina');
     
     // Reemplazar inputs por spans con el valor
-    const inputs = document.querySelectorAll('.pagina input');
-    inputs.forEach(input => {
-        const span = document.createElement('span');
-        span.textContent = input.value;
-        span.style.borderBottom = '1px solid black';
-        span.style.minWidth = input.offsetWidth + 'px';
-        span.style.display = 'inline-block';
-        span.style.textAlign = 'center';
-        input.parentNode.replaceChild(span, input);
-        input._span = span;
-        span._input = input;
-    });
+   // 1. Buscamos todos los inputs para convertirlos en texto para el PDF
+const inputs = document.querySelectorAll('.pagina input');
+
+inputs.forEach(input => {
+    // ¡ESTA ES LA CLAVE! 
+    // Si el input es el de la firma, lo saltamos para que no se convierta en texto visible
+    if (input.id === 'Firma_Digital') {
+        return; 
+    }
+
+    // El resto de los inputs (Cédula, Nombre, etc.) sí se convierten en span
+    const span = document.createElement('span');
+    span.textContent = input.value;
+    span.style.borderBottom = '1px solid black';
+    span.style.minWidth = input.offsetWidth + 'px';
+    span.style.display = 'inline-block';
+    span.style.textAlign = 'center';
+    input.parentNode.replaceChild(span, input);
+    input._span = span;
+    span._input = input;
+});
 
     // Ocultar botón limpiar
     const btnLimpiar = document.getElementById('btnLimpiar');
