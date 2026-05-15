@@ -34,11 +34,39 @@ btnLimpiar.addEventListener('click', () => {
 async function generarPDF() {
     const { jsPDF } = window.jspdf;
     const paginas = document.getElementById('formActa').querySelectorAll('.pagina');
+    
+    // Reemplazar inputs por spans con el valor
+    const inputs = document.querySelectorAll('.pagina input');
+    inputs.forEach(input => {
+        const span = document.createElement('span');
+        span.textContent = input.value;
+        span.style.borderBottom = '1px solid black';
+        span.style.minWidth = input.offsetWidth + 'px';
+        span.style.display = 'inline-block';
+        span.style.textAlign = 'center';
+        input.parentNode.replaceChild(span, input);
+        input._span = span;
+        span._input = input;
+    });
+
+    // Ocultar botón limpiar
+    const btnLimpiar = document.getElementById('btnLimpiar');
+    if (btnLimpiar) btnLimpiar.style.display = 'none';
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
     const pdf = new jsPDF('p', 'mm', 'a4');
     let primera = true;
 
     for (const pagina of paginas) {
-        const canvasPDF = await html2canvas(pagina, { scale: 2 });
+        const canvasPDF = await html2canvas(pagina, { 
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+            ignoreElements: (element) => element.id === 'btnLimpiar'
+    });
+        
         const imgData = canvasPDF.toDataURL('image/png');
         const ancho = pdf.internal.pageSize.getWidth();
         const alto = (canvasPDF.height * ancho) / canvasPDF.width;
@@ -47,6 +75,15 @@ async function generarPDF() {
         pdf.addImage(imgData, 'PNG', 0, 0, ancho, alto);
         primera = false;
     }
+
+    // Restaurar inputs
+    document.querySelectorAll('.pagina span').forEach(span => {
+        if (span._input) {
+            span.parentNode.replaceChild(span._input, span);
+        }
+    });
+
+    if (btnLimpiar) btnLimpiar.style.display = 'none';
 
     return pdf.output('datauristring');
 }

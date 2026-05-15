@@ -93,11 +93,9 @@
 
                 <div class="linea-firma">
                     <canvas id="pizarra" width="400" height="150" style="border: 1px solid #ccc; background: #fff; cursor: crosshair;"></canvas>
-                    <br>
-                    <button type="button" id="btnLimpiar" class="no-print ">Limpiar Firma</button>
                     <input type="hidden" name="firma_digital" id="Firma_Digital">
                 </div>
-
+                
                 <span>Firma del Trabajador:</span>
                 <div class="linea"><span>C.C No:</span><input class="medio" name="firma_cedula"></div>
 
@@ -108,8 +106,10 @@
                 <p class="compania"><b>COLOMBIANA DE COMERCIO S.A.</b></p>
                 <p class="compania"><b>NIT: 890.900.843-1</b></p>
             </div>
-
+            <button type="button" id="btnLimpiar" class="no-print ">Limpiar Firma</button>
             <button type="submit">Guardar Información</button>
+            
+
 
             <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
             <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>

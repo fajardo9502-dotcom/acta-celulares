@@ -88,3 +88,24 @@ button {
     display: none !important;
   }
 }
+
+/* Estilos para cuando se genera el PDF */
+.generando-pdf input {
+    border: none !important;
+    border-bottom: 1px solid black !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+.generando-pdf button {
+    display: none !important;
+}
+input {
+    -webkit-appearance: none;
+    appearance: none;
+    border: none !important;
+    border-bottom: 1px solid black !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
