@@ -15,7 +15,7 @@ app = FastAPI(title="Acta Celulares API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["POST", "OPTIONS"],
+    allow_methods=["POST", "put","OPTIONS"],
     allow_headers=["Content-Type"],
 )
 
@@ -155,6 +155,79 @@ async def recibir_acta(datos: DatosActa):
 # --- ARCHIVOS ESTÁTICOS (equivalente a ArchivoEstatico en Java) ---
 # Sirve la carpeta actual como archivos estáticos (HTML, CSS, JS, imágenes)
 app.mount("/", StaticFiles(directory="templates", html=True), name="static")
+
+
+
+
+# =====================================================================
+#  PASO 1: AQUÍ PEGAS EL NUEVO MODELO DE DATOS DE DESCUENTOS
+# =====================================================================
+class DatosDescuento(BaseModel):
+    Cedula: Optional[str] = ""
+    Funcionario: Optional[str] = ""
+    IMEI1: Optional[str] = ""
+    MODELO: Optional[str] = ""
+    ValorDescuento: Optional[str] = ""
+    Novedades: Optional[str] = ""
+
+
+# =====================================================================
+#  PASO 2: AQUÍ PEGAS LA FUNCIÓN QUE ESCRIBE EN EL EXCEL
+# =====================================================================
+def agregar_fila_descuento(datos: DatosDescuento):
+    with excel_lock:
+        if os.path.exists(EXCEL_PATH):
+            wb = load_workbook(EXCEL_PATH)
+        else:
+            wb = Workbook()
+            wb.active.title = "base"
+        
+        if "Descuentos" in wb.sheetnames:
+            ws = wb["Descuentos"]
+        else:
+            ws = wb.create_sheet(title="Descuentos")
+            ws.append(["Fecha", "Cédula", "Funcionario", "IMEI", "Modelo", "Valor Descuento", "Motivo"])
+
+        fecha_hoy = date.today().strftime("%d/%m/%Y")
+        nueva_fila = [
+            fecha_hoy, datos.Cedula, datos.Funcionario, 
+            datos.IMEI1, datos.MODELO, datos.ValorDescuento, datos.Novedades
+        ]
+        ws.append(nueva_fila)
+        wb.save(EXCEL_PATH)
+        wb.close()
+
+
+# =====================================================================
+#  PASO 3: AQUÍ PEGAS EL ENDPOINT DE DESCUENTOS (El Recepcionista)
+# =====================================================================
+@app.put("/api/descuento")
+async def recibir_descuento(datos: DatosDescuento):
+    try:
+        print(f"--> Petición recibida en /api/descuento para: {datos.Funcionario}")
+        agregar_fila_descuento(datos)
+        return {"mensaje": "OK: Descuento registrado en el sistema"}
+    except Exception as e:
+        import traceback
+        print(f"Error procesando el descuento: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- ARCHIVOS ESTÁTICOS ---
+# (Esto ya lo tenías, déjalo justo debajo del nuevo endpoint)
+app.mount("/", StaticFiles(directory="templates", html=True), name="static")
+
+
+# =====================================================================
+#  --- ARRANQUE DEL SERVIDOR --- (¡ESTO SE QUEDA DE ÚLTIMAS!)
+# =====================================================================
+if __name__ == "__main__":
+    import uvicorn
+    print("----------------------------------------------")
+    print("SERVIDOR LISTO EN: http://localhost:8080")
+    print("----------------------------------------------")
+    uvicorn.run(app, host="0.0.0.0", port=8080)
 
 
 # --- ARRANQUE DEL SERVIDOR ---
