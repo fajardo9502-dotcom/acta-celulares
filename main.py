@@ -151,10 +151,10 @@ async def recibir_acta(datos: DatosActa):
             print(f"  PDF guardado: {ruta_pdf}")
 
         # 2. Agregar fila al Excel
-        agregar_fila_excel(datos, ruta_pdf)
+        actualizar_fila_excel_actas(datos, ruta_pdf)
         print(f"  Excel actualizado: {EXCEL_PATH}")
 
-        return {"mensaje": "OK: PDF guardado y Excel actualizado"}
+        return {"mensaje": "OK: Registro actualizado y PDF guardado"}
 
     except Exception as e:
         import traceback
