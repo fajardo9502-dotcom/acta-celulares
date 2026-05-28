@@ -100,7 +100,7 @@ inputs.forEach(input => {
 // Dentro de tu script.js, cuando vayas a enviar los datos:
 const enviarDatos = async (datos) => {
     const respuesta = await fetch('/api/acta', { // <--- Esta es la ruta de tu main.py
-        method: 'POST',
+        method: 'PUT',
         headers: {
             'Content-Type': 'application/json'
         },
@@ -109,6 +109,8 @@ const enviarDatos = async (datos) => {
     const resultado = await respuesta.json();
     console.log(resultado.mensaje);
 };
+
+
 // 5. Cuando el usuario hace clic en "Guardar Información"
 document.getElementById('formActa').addEventListener('submit', async (event) => {
     event.preventDefault(); // Evita que la página se recargue

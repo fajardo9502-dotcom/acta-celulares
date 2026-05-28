@@ -62,15 +62,11 @@ def generar_nombre_pdf(datos: DatosActa) -> str:
     return f"acta_{cedula}_{fecha}.pdf"
 
 
-def agregar_fila_excel(datos: DatosActa, ruta_pdf: str):
+def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
     """
-    Equivalente a agregarFilaExcel() en Java.
-    Columnas: A=No, B=Telefono, C=IMEI1, D=IMEI2, E=MODELO, F=C.Costos,
-              G=Fecha Asignacion, H=UN2(vacío), I=UN, J=Supervisor,
-              K=Zona/Cargo, L=Código, M=Cedula, N=Funcionario, O=Bateria,
-              P=Cargador, Q=TipoEquipo, R=Estado, S=Novedades, T=Estado2,
-              U=vacío, V=Tipo Plan, W=Costo Plan, X=Cuenta, Y=Nombre Cuenta,
-              Z=Tipo Cargo, AA=Tipo Logia, AB=vacío, AC=Ruta PDF
+    [MÉTODO PUT] Recorre el Excel buscando la cédula del funcionario.
+    Si la encuentra, actualiza la información técnica y la ruta del PDF en esa misma fila.
+    Si NO la encuentra, la crea al final para evitar pérdida de datos.
     """
     with excel_lock:
         if os.path.exists(EXCEL_PATH):
@@ -80,49 +76,64 @@ def agregar_fila_excel(datos: DatosActa, ruta_pdf: str):
             wb.active.title = "base"
 
         ws = wb.active
-        last_row = ws.max_row  # equivalente a sheet.getLastRowNum()
-        numero_acta = last_row + 1
-        fecha_hoy = date.today().strftime("%d/%m/%Y")
+        
+        cedula_a_buscar = str(datos.Cedula).strip() if datos.Cedula else ""
+        empleado_encontrado = False
 
-        nueva_fila = [
-            numero_acta,                    # A - No (autoincremento)
-            datos.Telefono,                 # B
-            datos.IMEI1,                    # C
-            datos.IMEI2,                    # D
-            f"{datos.marca} - {datos.MODELO}",   # E
-            datos.C_Costos,                 # F
-            fecha_hoy,                      # G - Fecha Asignacion
-            "",                             # H - UN2 (vacío)
-            "",                             # I - UN
-            datos.Supervisor,               # J
-            datos.Zona_o_Cargo,             # K
-            datos.Codigo,                   # L
-            datos.Cedula,                   # M
-            datos.Funcionario,              # N
-            datos.Bateria,                  # O
-            datos.Cargador,                 # P
-            datos.TipoEquipo,               # Q
-            "",                       # R
-            datos.Novedades,                # S
-            "Activo",                       # T
-            "",                             # U (vacío)
-            datos.Tipo_Plan,                # V
-            datos.Costo_Plan,               # W
-            datos.Cuenta,                   # X
-            datos.Nombre_Cuenta,            # Y
-            datos.Tipo_Cargo,               # Z
-            datos.Tipo_Logia,               # AA
-            "",                             # AB (vacío)
-            ruta_pdf,                       # AC
-        ]
+        # Si el Excel tiene datos, buscamos desde la fila 2 (la 1 tiene los encabezados)
+        if ws.max_row >= 2 and cedula_a_buscar:
+            for row in range(2, ws.max_row + 1):
+                # Columna 13 es la 'M' (Cédula) según tu mapeo original
+                cedula_celda = str(ws.cell(row=row, column=13).value).strip() if ws.cell(row=row, column=13).value else ""
+                
+                if cedula_celda == cedula_a_buscar:
+                    # ¡LO ENCONTRÓ! Reescribimos los datos técnicos en esta misma fila
+                    ws.cell(row=row, column=2, value=datos.Telefono)       # B - Telefono
+                    ws.cell(row=row, column=3, value=datos.IMEI1)          # C - IMEI1
+                    ws.cell(row=row, column=4, value=datos.IMEI2)          # D - IMEI2
+                    ws.cell(row=row, column=5, value=f"{datos.marca} - {datos.MODELO}") # E - Modelo
+                    ws.cell(row=row, column=6, value=datos.C_Costos)       # F - C.Costos
+                    ws.cell(row=row, column=10, value=datos.Supervisor)    # J - Supervisor
+                    ws.cell(row=row, column=11, value=datos.Zona_o_Cargo)  # K - Zona o Cargo
+                    ws.cell(row=row, column=12, value=datos.Codigo)        # L - Código
+                    ws.cell(row=row, column=14, value=datos.Funcionario)   # N - Funcionario
+                    ws.cell(row=row, column=15, value=datos.Bateria)       # O - Bateria
+                    ws.cell(row=row, column=16, value=datos.Cargador)      # P - Cargador
+                    ws.cell(row=row, column=17, value=datos.TipoEquipo)    # Q - TipoEquipo
+                    ws.cell(row=row, column=19, value=datos.Novedades)     # S - Novedades
+                    ws.cell(row=row, column=22, value=datos.Tipo_Plan)     # V - Tipo Plan
+                    ws.cell(row=row, column=23, value=datos.Costo_Plan)    # W - Costo Plan
+                    ws.cell(row=row, column=24, value=datos.Cuenta)        # X - Cuenta
+                    ws.cell(row=row, column=25, value=datos.Nombre_Cuenta) # Y - Nombre Cuenta
+                    ws.cell(row=row, column=26, value=datos.Tipo_Cargo)    # Z - Tipo Cargo
+                    ws.cell(row=row, column=27, value=datos.Tipo_Logia)    # AA - Tipo Logia
+                    ws.cell(row=row, column=29, value=ruta_pdf)            # AC - Ruta PDF (Columna 29)
+                    
+                    print(f"--> [PUT] Fila {row} ACTUALIZADA exitosamente para la cédula: {cedula_a_buscar}")
+                    empleado_encontrado = True
+                    break # Detener la búsqueda porque ya lo actualizamos
 
-        ws.append(nueva_fila)
+        # Caso alternativo: Si no se encuentra la cédula, se añade como nueva fila para que no falle
+        if not empleado_encontrado:
+            numero_acta = ws.max_row + 1
+            fecha_hoy = date.today().strftime("%d/%m/%Y")
+            nueva_fila = [
+                numero_acta, datos.Telefono, datos.IMEI1, datos.IMEI2,
+                f"{datos.marca} - {datos.MODELO}", datos.C_Costos, fecha_hoy,
+                "", "", datos.Supervisor, datos.Zona_o_Cargo, datos.Codigo,
+                datos.Cedula, datos.Funcionario, datos.Bateria, datos.Cargador,
+                datos.TipoEquipo, "", datos.Novedades, "Activo", "",
+                datos.Tipo_Plan, datos.Costo_Plan, datos.Cuenta, datos.Nombre_Cuenta,
+                datos.Tipo_Cargo, datos.Tipo_Logia, "", ruta_pdf
+            ]
+            ws.append(nueva_fila)
+            print(f"--> [PUT] Cédula no localizada. Se insertó registro nuevo al final para: {cedula_a_buscar}")
+
         wb.save(EXCEL_PATH)
         wb.close()
 
-
 # --- ENDPOINT PRINCIPAL (equivalente a RecibirActa en Java) ---
-@app.post("/api/acta")
+@app.put("/api/acta")
 async def recibir_acta(datos: DatosActa):
     try:
         # 1. Guardar PDF
@@ -217,18 +228,6 @@ async def recibir_descuento(datos: DatosDescuento):
 # --- ARCHIVOS ESTÁTICOS ---
 # (Esto ya lo tenías, déjalo justo debajo del nuevo endpoint)
 app.mount("/", StaticFiles(directory="templates", html=True), name="static")
-
-
-# =====================================================================
-#  --- ARRANQUE DEL SERVIDOR --- (¡ESTO SE QUEDA DE ÚLTIMAS!)
-# =====================================================================
-if __name__ == "__main__":
-    import uvicorn
-    print("----------------------------------------------")
-    print("SERVIDOR LISTO EN: http://localhost:8080")
-    print("----------------------------------------------")
-    uvicorn.run(app, host="0.0.0.0", port=8080)
-
 
 # --- ARRANQUE DEL SERVIDOR ---
 if __name__ == "__main__":
