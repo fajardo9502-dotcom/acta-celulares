@@ -129,20 +129,30 @@ document.getElementById('formActa').addEventListener('submit', async (event) => 
             return valor.toString().trim().toUpperCase();
         }
         return "";
+    };
+
+    // --- FUNCIÓN 2: Pasa a formato "Inicial Mayúscula y resto minúsculas" (Tipo Título) ---
+    const capitalizarTexto = (valor) => {
+        if (valor) {
+            return valor.toString().trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        }
+        return "";
+    };
 
     // Arma el paquete de datos para enviar a Python
     const datos = {
-        Funcionario:   limpiarTextoMayuscula(campos.get('Funcionario')),
+        Funcionario:   capitalizarTexto(campos.get('Funcionario')),
         Cedula:        campos.get('Cedula') ? campos.get('Cedula').toString().trim() : "",
         MODELO:        limpiarTextoMayuscula(campos.get('MODELO')),
         marca:         limpiarTextoMayuscula(campos.get('marca')),
         IMEI1:         limpiarTextoMayuscula(campos.get('IMEI1')),
         IMEI2:         limpiarTextoMayuscula(campos.get('IMEI2')),
         Telefono:      limpiarTextoMayuscula(campos.get('Telefono')),
-        Supervisor:    limpiarTextoMayuscula(campos.get('Supervisor')),
+        Supervisor:    capitalizarTexto(campos.get('Supervisor')),
         Zona_o_Cargo:  limpiarTextoMayuscula(campos.get('Zona o Cargo')),
         Codigo:        limpiarTextoMayuscula(campos.get('Código')),
         firma_digital: inputFirma.value,           // Se mantiene intacta
+        Novedades:  capitalizarTexto(campos.get('novedades')),
     };
 
    // Genera el PDF y lo agrega a los datos

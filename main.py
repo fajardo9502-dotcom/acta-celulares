@@ -80,6 +80,17 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
         cedula_a_buscar = str(datos.Cedula).strip() if datos.Cedula else ""
         empleado_encontrado = False
 
+        def limpiar_mayuscula(texto):
+            if texto:
+                return str(texto).strip().upper()
+            return ""
+
+        # --- FUNCIÓN AYUDANTE 2: INICIAL MAYÚSCULA (Tipo Título) ---
+        def limpiar_titulo(texto):
+            if texto:
+                return str(texto).strip().title() # El método .title() de Python hace la magia
+            return ""
+
         # Si el Excel tiene datos, buscamos desde la fila 2 (la 1 tiene los encabezados)
         if ws.max_row >= 2 and cedula_a_buscar:
             for row in range(2, ws.max_row + 1):
@@ -87,47 +98,50 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                 cedula_celda = str(ws.cell(row=row, column=13).value).strip() if ws.cell(row=row, column=13).value else ""
                 
                 if cedula_celda == cedula_a_buscar:
-                    # ¡LO ENCONTRÓ! Reescribimos los datos técnicos en esta misma fila
-                    ws.cell(row=row, column=2, value=datos.Telefono)       # B - Telefono
-                    ws.cell(row=row, column=3, value=datos.IMEI1)          # C - IMEI1
-                    ws.cell(row=row, column=4, value=datos.IMEI2)          # D - IMEI2
-                    ws.cell(row=row, column=5, value=f"{datos.marca} - {datos.MODELO}") # E - Modelo
-                    ws.cell(row=row, column=6, value=datos.C_Costos)       # F - C.Costos
-                    ws.cell(row=row, column=10, value=datos.Supervisor)    # J - Supervisor
-                    ws.cell(row=row, column=11, value=datos.Zona_o_Cargo)  # K - Zona o Cargo
-                    ws.cell(row=row, column=12, value=datos.Codigo)        # L - Código
-                    ws.cell(row=row, column=14, value=datos.Funcionario)   # N - Funcionario
-                    ws.cell(row=row, column=15, value=datos.Bateria)       # O - Bateria
-                    ws.cell(row=row, column=16, value=datos.Cargador)      # P - Cargador
-                    ws.cell(row=row, column=17, value=datos.TipoEquipo)    # Q - TipoEquipo
-                    ws.cell(row=row, column=19, value=datos.Novedades)     # S - Novedades
-                    ws.cell(row=row, column=22, value=datos.Tipo_Plan)     # V - Tipo Plan
-                    ws.cell(row=row, column=23, value=datos.Costo_Plan)    # W - Costo Plan
-                    ws.cell(row=row, column=24, value=datos.Cuenta)        # X - Cuenta
-                    ws.cell(row=row, column=25, value=datos.Nombre_Cuenta) # Y - Nombre Cuenta
-                    ws.cell(row=row, column=26, value=datos.Tipo_Cargo)    # Z - Tipo Cargo
-                    ws.cell(row=row, column=27, value=datos.Tipo_Logia)    # AA - Tipo Logia
-                    ws.cell(row=row, column=29, value=ruta_pdf)            # AC - Ruta PDF (Columna 29)
+                    # Aplicamos las funciones según corresponda cada columna
+                    ws.cell(row=row, column=2, value=limpiar_mayuscula(datos.Telefono))       
+                    ws.cell(row=row, column=3, value=limpiar_mayuscula(datos.IMEI1))          
+                    ws.cell(row=row, column=4, value=limpiar_mayuscula(datos.IMEI2))          
+                    ws.cell(row=row, column=5, value=limpiar_mayuscula(f"{datos.marca} - {datos.MODELO}")) 
+                    ws.cell(row=row, column=6, value=limpiar_mayuscula(datos.C_Costos))       
                     
-                    print(f"--> [PUT] Fila {row} ACTUALIZADA exitosamente para la cédula: {cedula_a_buscar}")
+                    # 👤 Aquí usamos limpiar_titulo para los nombres
+                    ws.cell(row=row, column=10, value=limpiar_titulo(datos.Supervisor))    
+                    ws.cell(row=row, column=11, value=limpiar_titulo(datos.Zona_o_Cargo))  
+                    ws.cell(row=row, column=12, value=limpiar_mayuscula(datos.Codigo))        
+                    ws.cell(row=row, column=14, value=limpiar_titulo(datos.Funcionario))   
+                    
+                    ws.cell(row=row, column=15, value=limpiar_mayuscula(datos.Bateria))       
+                    ws.cell(row=row, column=16, value=limpiar_mayuscula(datos.Cargador))      
+                    ws.cell(row=row, column=17, value=limpiar_mayuscula(datos.TipoEquipo))    
+                    ws.cell(row=row, column=19, value=limpiar_mayuscula(datos.Novedades))     
+                    ws.cell(row=row, column=22, value=limpiar_mayuscula(datos.Tipo_Plan))     
+                    ws.cell(row=row, column=23, value=limpiar_mayuscula(datos.Costo_Plan))    
+                    ws.cell(row=row, column=24, value=limpiar_mayuscula(datos.Cuenta))        
+                    ws.cell(row=row, column=25, value=limpiar_mayuscula(datos.Nombre_Cuenta)) 
+                    ws.cell(row=row, column=26, value=limpiar_mayuscula(datos.Tipo_Cargo))    
+                    ws.cell(row=row, column=27, value=limpiar_mayuscula(datos.Tipo_Logia))    
+                    ws.cell(row=row, column=29, value=ruta_pdf)            
+                    
+                    print(f"--> [PUT] Fila {row} ACTUALIZADA (Mixto) para: {cedula_a_buscar}")
                     empleado_encontrado = True
-                    break # Detener la búsqueda porque ya lo actualizamos
+                    break 
 
-        # Caso alternativo: Si no se encuentra la cédula, se añade como nueva fila para que no falle
+        # Caso alternativo (Fila Nueva): Hacemos lo mismo al armar la lista
         if not empleado_encontrado:
             numero_acta = ws.max_row + 1
             fecha_hoy = date.today().strftime("%d/%m/%Y")
             nueva_fila = [
-                numero_acta, datos.Telefono, datos.IMEI1, datos.IMEI2,
-                f"{datos.marca} - {datos.MODELO}", datos.C_Costos, fecha_hoy,
-                "", "", datos.Supervisor, datos.Zona_o_Cargo, datos.Codigo,
-                datos.Cedula, datos.Funcionario, datos.Bateria, datos.Cargador,
-                datos.TipoEquipo, "", datos.Novedades, "Activo", "",
-                datos.Tipo_Plan, datos.Costo_Plan, datos.Cuenta, datos.Nombre_Cuenta,
-                datos.Tipo_Cargo, datos.Tipo_Logia, "", ruta_pdf
+                numero_acta, limpiar_mayuscula(datos.Telefono), limpiar_mayuscula(datos.IMEI1), limpiar_mayuscula(datos.IMEI2),
+                limpiar_mayuscula(f"{datos.marca} - {datos.MODELO}"), limpiar_mayuscula(datos.C_Costos), fecha_hoy,
+                "", "", limpiar_titulo(datos.Supervisor), limpiar_titulo(datos.Zona_o_Cargo), limpiar_mayuscula(datos.Codigo),
+                cedula_a_buscar, limpiar_titulo(datos.Funcionario), limpiar_mayuscula(datos.Bateria), limpiar_mayuscula(datos.Cargador),
+                limpiar_mayuscula(datos.TipoEquipo), "", limpiar_mayuscula(datos.Novedades), "ACTIVO", "",
+                limpiar_mayuscula(datos.Tipo_Plan), limpiar_mayuscula(datos.Costo_Plan), limpiar_mayuscula(datos.Cuenta), limpiar_mayuscula(datos.Nombre_Cuenta),
+                limpiar_mayuscula(datos.Tipo_Cargo), limpiar_mayuscula(datos.Tipo_Logia), "", ruta_pdf
             ]
             ws.append(nueva_fila)
-            print(f"--> [PUT] Cédula no localizada. Se insertó registro nuevo al final para: {cedula_a_buscar}")
+            print(f"--> [PUT] Fila NUEVA creada (Mixto) para: {cedula_a_buscar}")
 
         wb.save(EXCEL_PATH)
         wb.close()
