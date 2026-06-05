@@ -92,7 +92,7 @@ inputs.forEach(input => {
         }
     });
 
-    if (btnLimpiar) btnLimpiar.style.display = 'none';
+    if (btnLimpiar) btnLimpiar.style.display = 'inline-block';
 
     return pdf.output('datauristring');
 }
@@ -155,14 +155,25 @@ document.getElementById('formActa').addEventListener('submit', async (event) => 
         Novedades:  capitalizarTexto(campos.get('novedades')),
     };
 
-   // Genera el PDF y lo agrega a los datos
-    const pdfBase64 = await generarPDF();
-    datos.pdfBase64 = pdfBase64;
+  try {
+        console.log("Generando PDF y enviando datos...");
+        
+        // 1. Genera el PDF (oculta y muestra el botón limpiar internamente)
+        const pdfBase64 = await generarPDF();
+        datos.pdfBase64 = pdfBase64;
 
-    // Envía los datos a Python
-    await enviarDatos(datos);
-    alert('Acta guardada correctamente.');
-    document.getElementById('formActa').reset();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    inputFirma.value = "";
+        // 2. Envía los datos a la API de Python
+        await enviarDatos(datos);
+        
+        // 3. Alerta de éxito al usuario
+        alert('Acta guardada correctamente.');
+
+        // 4. Recarga la página por completo (F5 automático)
+        // Esto limpia el formulario, borra el canvas y revive el botón de limpiar de forma nativa
+        location.reload();
+
+    } catch (error) {
+        console.error("Error crítico en el proceso:", error);
+        alert("Hubo un error al guardar el acta. Por favor intente de nuevo.");
+    }
 });

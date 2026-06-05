@@ -106,8 +106,7 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                     ws.cell(row=row, column=6, value=limpiar_mayuscula(datos.C_Costos))       
                     
                     # 👤 Aquí usamos limpiar_titulo para los nombres
-                    ws.cell(row=row, column=10, value=limpiar_titulo(datos.Supervisor))    
-                    ws.cell(row=row, column=11, value=limpiar_titulo(datos.Zona_o_Cargo))  
+                    ws.cell(row=row, column=10, value=limpiar_titulo(datos.Supervisor))     
                     ws.cell(row=row, column=12, value=limpiar_mayuscula(datos.Codigo))        
                     ws.cell(row=row, column=14, value=limpiar_titulo(datos.Funcionario))   
                     
@@ -120,7 +119,8 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                     ws.cell(row=row, column=24, value=limpiar_mayuscula(datos.Cuenta))        
                     ws.cell(row=row, column=25, value=limpiar_mayuscula(datos.Nombre_Cuenta)) 
                     ws.cell(row=row, column=26, value=limpiar_mayuscula(datos.Tipo_Cargo))    
-                    ws.cell(row=row, column=27, value=limpiar_mayuscula(datos.Tipo_Logia))    
+                    ws.cell(row=row, column=27, value=limpiar_mayuscula(datos.Tipo_Logia))  
+                    ws.cell(row=row, column=11, value=limpiar_mayuscula(datos.Zona_o_Cargo))   
                     ws.cell(row=row, column=29, value=ruta_pdf)            
                     
                     print(f"--> [PUT] Fila {row} ACTUALIZADA (Mixto) para: {cedula_a_buscar}")
