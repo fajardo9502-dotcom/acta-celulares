@@ -1,13 +1,20 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional
+# Librerías estándar de Python
 import base64
 import os
-from datetime import date
-from openpyxl import load_workbook, Workbook
 import threading
+from datetime import date
+from typing import Optional
+
+# Librerías externas
+import pandas as pd
+from openpyxl import Workbook, load_workbook
+from pydantic import BaseModel
+
+# FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
 
 app = FastAPI(title="Acta Celulares API")
 
