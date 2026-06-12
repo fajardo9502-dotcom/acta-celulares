@@ -148,6 +148,7 @@ document.getElementById('formActa').addEventListener('submit', async (event) => 
         IMEI1:         limpiarTextoMayuscula(campos.get('IMEI1')),
         IMEI2:         limpiarTextoMayuscula(campos.get('IMEI2')),
         Telefono:      limpiarTextoMayuscula(campos.get('Telefono')),
+        C_Costos:      limpiarTextoMayuscula(campos.get('C_Costos') || campos.get('Centro de Costos')),
         Supervisor:    capitalizarTexto(campos.get('Supervisor')),
         Zona_o_Cargo:  limpiarTextoMayuscula(campos.get('Zona o Cargo')),
         Codigo:        limpiarTextoMayuscula(campos.get('Código')),
