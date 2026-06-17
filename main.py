@@ -6,7 +6,7 @@ from datetime import date
 from typing import Optional
 
 # Librerías externas
-import pandas as pd  # <-- Añadido para el cruce automático
+import pandas as pd  # Usado para el cruce automático de datos corporativos
 from openpyxl import Workbook, load_workbook
 from pydantic import BaseModel
 
@@ -27,9 +27,7 @@ app.add_middleware(
 
 # --- CONFIGURACIÓN ---
 EXCEL_PATH = r"C:\Users\POLLO\OneDrive - Colombiana de Comercio S.A\base actas de entrega.xlsx"
-
-#  RUTA DE TU SEGUNDO EXCEL (Ajusta el nombre real del archivo si es diferente a 'Libro2.xlsx')
-RUTA_BASE_ALIMENTADORA = r"C:\Users\POLLO\OneDrive - Colombiana de Comercio S.A\report_Planta_de_Personal_Completa__activos_e_inactivos_--colombiana--1010236537--_93bb93e0-54b6-46de-9477-06f6b4e6b9c3 (1).xlsx" 
+RUTA_BASE_ALIMENTADORA = r"C:\Users\POLLO\OneDrive - Colombiana de Comercio S.A\report_Planta_de_Personal_Completa__activos_e_inactivos_--colombiana--1010236537--_93bb93e0-54b6-46de-9477-06f6b4e6b9c3 (1).xlsx"
 
 PDF_FOLDER = "PDFs"
 os.makedirs(PDF_FOLDER, exist_ok=True)
@@ -38,29 +36,71 @@ os.makedirs(PDF_FOLDER, exist_ok=True)
 excel_lock = threading.Lock()
 
 
-# --- MODELOS DE DATOS ---
+# ================================================================
+# UTILIDAD: Limpieza estricta de cédula
+# ================================================================
+def limpiar_cedula(valor) -> str:
+    """
+    Convierte cualquier valor de cédula a texto numérico estricto.
+    Elimina espacios, el '.0' que mete Excel al leer números,
+    y la notación científica que puede generar Pandas.
+    Ejemplos:
+        "1030650138.0"  -> "1030650138"
+        " 1030650138 "  -> "1030650138"
+        1030650138.0    -> "1030650138"
+    """
+    if valor is None:
+        return ""
+    texto = str(valor).strip()
+    try:
+        # Esto convierte "1030650138.0" o 1.03e+09 a entero limpio
+        texto = str(int(float(texto)))
+    except (ValueError, OverflowError):
+        pass
+    # Quitar puntos de miles y espacios residuales
+    texto = texto.replace(".", "").replace(",", "").replace(" ", "")
+    return texto
+
+
+# ================================================================
+# UTILIDADES DE TEXTO
+# ================================================================
+def limpiar_mayuscula(texto) -> str:
+    if texto:
+        return str(texto).strip().upper()
+    return ""
+
+def limpiar_titulo(texto) -> str:
+    if texto:
+        return str(texto).strip().title()
+    return ""
+
+
+# ================================================================
+# MODELOS DE DATOS
+# ================================================================
 class DatosActa(BaseModel):
     Telefono: Optional[str] = ""
     IMEI1: Optional[str] = ""
     IMEI2: Optional[str] = ""
     MODELO: Optional[str] = ""
     marca: Optional[str] = ""
-    C_Costos: Optional[str] = ""        
+    C_Costos: Optional[str] = ""
     Supervisor: Optional[str] = ""
-    Zona_o_Cargo: Optional[str] = ""    
-    Codigo: Optional[str] = ""          
+    Zona_o_Cargo: Optional[str] = ""
+    Codigo: Optional[str] = ""
     Cedula: Optional[str] = ""
     Funcionario: Optional[str] = ""
     Bateria: Optional[str] = "No"
     Cargador: Optional[str] = ""
     TipoEquipo: Optional[str] = ""
     Novedades: Optional[str] = ""
-    Tipo_Plan: Optional[str] = ""       
-    Costo_Plan: Optional[str] = ""      
+    Tipo_Plan: Optional[str] = ""
+    Costo_Plan: Optional[str] = ""
     Cuenta: Optional[str] = ""
-    Nombre_Cuenta: Optional[str] = ""   
-    Tipo_Cargo: Optional[str] = ""      
-    Tipo_Logia: Optional[str] = ""      
+    Nombre_Cuenta: Optional[str] = ""
+    Tipo_Cargo: Optional[str] = ""
+    Tipo_Logia: Optional[str] = ""
     pdfBase64: Optional[str] = ""
     firma_digital: Optional[str] = ""
 
@@ -74,106 +114,103 @@ class DatosDescuento(BaseModel):
     Novedades: Optional[str] = ""
 
 
-# --- FUNCIÓN DE CRUCE DE DATOS (PANDAS) ---
-def procesar_columna_u_matriz(valor_columna_u):
+# ================================================================
+# FUNCIÓN DE CRUCE POR CÉDULA (Base Alimentadora)
+# ================================================================
+def procesar_cruce_por_cedula(cedula_usuario: str) -> dict:
     """
-    Toma el valor de la columna U (ej: '104-944058') de la matriz de personal,
-    lo pica por el guion y devuelve las partes separadas junto con el nombre UN.
+    Busca al empleado en la base alimentadora por su cédula.
+    Retorna un diccionario con tres claves:
+        - "UN2":            parte corta del centro de costos (ej: "104")
+        - "C_COSTOS_LARGO": parte larga del centro de costos (ej: "944058")
+        - "UN":             nombre de la unidad organizativa
+
+    IMPORTANTE: Si NO encuentra al empleado, las tres claves vienen
+    como None (no como "") para que la función de escritura sepa que
+    debe CONSERVAR lo que ya habia en el Excel (salvaguarda de datos).
     """
+    resultado = {"UN2": None, "C_COSTOS_LARGO": None, "UN": None}
+
+    cedula_limpia = limpiar_cedula(cedula_usuario)
+    if not cedula_limpia:
+        print("   Cedula vacia, se omite el cruce.")
+        return resultado
+
     if not os.path.exists(RUTA_BASE_ALIMENTADORA):
-        print(f" Alerta: No se encontró la base matriz alimentadora en {RUTA_BASE_ALIMENTADORA}")
-        return None
+        print(f"   Base alimentadora no encontrada en: {RUTA_BASE_ALIMENTADORA}")
+        return resultado
 
     try:
-        texto_u = str(valor_columna_u).strip()
-        if '-' not in texto_u:
-            return None
+        # Leer toda la base como texto para evitar que Pandas convierta
+        # cedulas a float (1030650138.0) y rompa el cruce
+        df = pd.read_excel(RUTA_BASE_ALIMENTADORA, sheet_name="Planta de Personal_Completa (ac", dtype=str)
+        df.columns = df.columns.str.strip()
 
-        # Separamos los 3 dígitos del número largo
-        un2_parte, largo_parte = texto_u.split('-', 1)
-        un2_extraido = un2_parte.strip()
-        cc_largo_extraido = largo_parte.strip()
+        # La columna de cedula en esta base es 'Nombre de usuario'
+        columna_cedula = 'Nombre de usuario'
 
-        # Ahora leemos el Excel de personal para buscar el nombre de la unidad (UN)
-        df_matriz = pd.read_excel(RUTA_BASE_ALIMENTADORA, dtype=str)
-        df_matriz.columns = df_matriz.columns.str.strip()
-        
-        columna_llave = 'Centro de costos Código'
-        if columna_llave in df_matriz.columns:
-            df_matriz[columna_llave] = df_matriz[columna_llave].str.strip()
-            
-            # Buscamos la fila exacta que tiene ese código completo en la columna U
-            coincidencia = df_matriz[df_matriz[columna_llave] == texto_u]
-            
-            un_val = ""
-            if not coincidencia.empty:
-                fila = coincidencia.iloc[0]
-                un_val = "" if pd.isna(fila.get('UN')) else str(fila.get('UN')).strip()
-            
-            print(f" [Cruce Exitoso] Código U: {texto_u} -> UN2: {un2_extraido} | F: {cc_largo_extraido} | UN: {un_val}")
-            return {
-                "UN2": un2_extraido,
-                "C_COSTOS_LARGO": cc_largo_extraido,
-                "UN": un_val
-            }
-            
+        if columna_cedula not in df.columns:
+            print(f" 🚨 No se encontro columna de cedula. Columnas disponibles: {list(df.columns)}")
+            return resultado
+
+        # Limpiar cedulas de la base alimentadora con la misma funcion estricta
+        df["_cedula_limpia"] = df[columna_cedula].apply(limpiar_cedula)
+
+        # Buscar coincidencia exacta
+        coincidencia = df[df["_cedula_limpia"] == cedula_limpia]
+
+        if coincidencia.empty:
+            print(f" ⚠️  Cedula '{cedula_limpia}' NO encontrada en la base alimentadora.")
+            return resultado  # None -> salvaguarda activada
+
+        fila = coincidencia.iloc[0]
+
+        # Extraer Centro de Costos Codigo
+        columna_cc = "Centro de costos Código"
+        if columna_cc in df.columns:
+            valor_cc = str(fila.get(columna_cc, "")).strip()
+            if valor_cc.lower() in ("nan", "none", ""):
+                valor_cc = ""
+
+            if "-" in valor_cc:
+                un2_parte, largo_parte = valor_cc.split("-", 1)
+                resultado["UN2"] = un2_parte.strip()
+                resultado["C_COSTOS_LARGO"] = largo_parte.strip()
+            elif valor_cc:
+                resultado["C_COSTOS_LARGO"] = valor_cc
+                resultado["UN2"] = ""
+        else:
+            print(f"   Columna '{columna_cc}' no encontrada en la base alimentadora.")
+
+        # Extraer nombre de la Unidad (UN)
+        columna_un = "Unidad Estratégica de Negocio Nombre"
+        if columna_un in df.columns:
+            valor_un = str(fila.get(columna_un, "")).strip()
+            resultado["UN"] = "" if valor_un.lower() in ("nan", "none") else valor_un.upper()
+        else:
+            resultado["UN"] = ""
+
+        print(f"  [Cruce OK] Cedula: {cedula_limpia} -> "
+              f"UN2: {resultado['UN2']} | C.Costos: {resultado['C_COSTOS_LARGO']} | UN: {resultado['UN']}")
+        return resultado
+
     except Exception as e:
-        print(f" Error en el procesamiento de romper columna U: {e}")
-        
-    return None
+        print(f"  Error en procesar_cruce_por_cedula: {e}")
+        return resultado  # En caso de error tambien conservamos los datos viejos
 
+
+# ================================================================
+# GENERADOR DE NOMBRE DE PDF
+# ================================================================
 def generar_nombre_pdf(datos: DatosActa) -> str:
     cedula = "".join(c for c in (datos.Cedula or "sin_cedula") if c.isalnum())
     fecha = date.today().strftime("%Y%m%d")
     return f"acta_{cedula}_{fecha}.pdf"
 
-def procesar_cruce_por_columna_u(valor_combinado_u):
-    """
-    Toma el valor combinado con guion (ej: '104-944058') que ya estaba en el Excel de Actas,
-    lo pica en dos partes y busca en la matriz de personal el nombre de la unidad (UN).
-    """
-    if not os.path.exists(RUTA_BASE_ALIMENTADORA):
-        print(f"⚠️ Alerta: No se encontró la base matriz alimentadora en {RUTA_BASE_ALIMENTADORA}")
-        return {"UN2": "", "C_COSTOS_LARGO": "", "UN": ""}
 
-    try:
-        texto_u = str(valor_combinado_u).strip()
-        if '-' not in texto_u:
-            # Si por alguna razón no tiene guion, devolvemos vacío para no romper el programa
-            return {"UN2": "", "C_COSTOS_LARGO": texto_u, "UN": ""}
-
-        # Separamos los 3 dígitos del número largo usando el guion '-'
-        un2_parte, largo_parte = texto_u.split('-', 1)
-        un2_extraido = un2_parte.strip()
-        cc_largo_extraido = largo_parte.strip()
-
-        # Leemos la planta de personal para sacar la columna 'UN' (Nombre de unidad)
-        df_matriz = pd.read_excel(RUTA_BASE_ALIMENTADORA, dtype=str)
-        df_matriz.columns = df_matriz.columns.str.strip()
-        
-        columna_llave = 'Centro de costos Código'
-        un_val = ""
-        
-        if columna_llave in df_matriz.columns:
-            df_matriz[columna_llave] = df_matriz[columna_llave].str.strip()
-            coincidencia = df_matriz[df_matriz[columna_llave] == texto_u]
-            
-            if not coincidencia.empty:
-                fila = coincidencia.iloc[0]
-                un_val = "" if pd.isna(fila.get('UN')) else str(fila.get('UN')).strip()
-
-        print(f"🎯 [Pandas] Separación exitosa -> UN2: {un2_extraido} | C.Costos: {cc_largo_extraido} | UN: {un_val}")
-        return {
-            "UN2": un2_extraido,
-            "C_COSTOS_LARGO": cc_largo_extraido,
-            "UN": un_val
-        }
-
-    except Exception as e:
-        print(f"🚨 Error procesando el split de la columna U: {e}")
-        return {"UN2": "", "C_COSTOS_LARGO": "", "UN": ""}
-
-
+# ================================================================
+# ACTUALIZACIÓN DEL EXCEL DE ACTAS (hoja principal "base")
+# ================================================================
 def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
     with excel_lock:
         if os.path.exists(EXCEL_PATH):
@@ -183,93 +220,108 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
             wb.active.title = "base"
 
         ws = wb.active
-        cedula_a_buscar = str(datos.Cedula).strip() if datos.Cedula else ""
+        # Limpiar la cedula entrante con la funcion estricta
+        cedula_a_buscar = limpiar_cedula(datos.Cedula)
         empleado_encontrado = False
 
-        def limpiar_mayuscula(texto):
-            if texto: return str(texto).strip().upper()
-            return ""
+        # Cruce con la base alimentadora
+        info_unidades = procesar_cruce_por_cedula(cedula_a_buscar)
+        # cruce_exitoso es True SOLO si encontro al empleado (valores no son None)
+        cruce_exitoso = info_unidades["UN2"] is not None
 
-        def limpiar_titulo(texto):
-            if texto: return str(texto).strip().title()
-            return ""
-
-        # Si el Excel tiene datos, buscamos por cédula
+        # Buscar la fila en el Excel de actas
         if ws.max_row >= 2 and cedula_a_buscar:
             for row in range(2, ws.max_row + 1):
-                cedula_celda = str(ws.cell(row=row, column=13).value).strip() if ws.cell(row=row, column=13).value else ""
-                
+                # Limpiar la cedula del Excel con la misma funcion para evitar
+                # el problema de "1030650138.0" vs "1030650138"
+                cedula_celda = limpiar_cedula(ws.cell(row=row, column=13).value)
+
                 if cedula_celda == cedula_a_buscar:
-                    # 🔍 1. LEER lo que ya estaba guardado en la columna 6 (F) antes de modificar nada
-                    valor_u_original = ws.cell(row=row, column=6).value
-                    print(f"🔎 Valor original encontrado en Columna F (Fila {row}): '{valor_u_original}'")
+                    fecha_hoy = date.today().strftime("%d/%m/%Y")
 
-                    # ⚙️ 2. PROCESAR el texto original para picar el guion y traer los datos correctos
-                    info_unidades = procesar_cruce_por_columna_u(valor_u_original)
+                    # Datos que SIEMPRE se actualizan (vienen del formulario web)
+                    ws.cell(row=row, column=2,  value=limpiar_mayuscula(datos.Telefono))
+                    ws.cell(row=row, column=3,  value=limpiar_mayuscula(datos.IMEI1))
+                    ws.cell(row=row, column=4,  value=limpiar_mayuscula(datos.IMEI2))
+                    ws.cell(row=row, column=5,  value=limpiar_mayuscula(f"{datos.marca} - {datos.MODELO}"))
+                    ws.cell(row=row, column=7,  value=fecha_hoy)
+                    ws.cell(row=row, column=10, value=limpiar_titulo(datos.Supervisor))
+                    ws.cell(row=row, column=11, value=limpiar_mayuscula(datos.Zona_o_Cargo))
+                    ws.cell(row=row, column=12, value=limpiar_mayuscula(datos.Codigo))
+                    ws.cell(row=row, column=14, value=limpiar_titulo(datos.Funcionario))
+                    ws.cell(row=row, column=15, value=limpiar_mayuscula(datos.Bateria))
+                    ws.cell(row=row, column=16, value=limpiar_mayuscula(datos.Cargador))
+                    ws.cell(row=row, column=17, value=limpiar_mayuscula(datos.TipoEquipo))
+                    ws.cell(row=row, column=19, value=limpiar_mayuscula(datos.Novedades))
+                    ws.cell(row=row, column=22, value=limpiar_mayuscula(datos.Tipo_Plan))
+                    ws.cell(row=row, column=23, value=limpiar_mayuscula(datos.Costo_Plan))
+                    ws.cell(row=row, column=24, value=limpiar_mayuscula(datos.Cuenta))
+                    ws.cell(row=row, column=25, value=limpiar_mayuscula(datos.Nombre_Cuenta))
+                    ws.cell(row=row, column=26, value=limpiar_mayuscula(datos.Tipo_Cargo))
+                    ws.cell(row=row, column=27, value=limpiar_mayuscula(datos.Tipo_Logia))
+                    ws.cell(row=row, column=29, value=ruta_pdf)
 
-                    # 📝 3. ACTUALIZACIÓN de las columnas normales que vienen del formulario web
-                    ws.cell(row=row, column=2, value=limpiar_mayuscula(datos.Telefono))       
-                    ws.cell(row=row, column=3, value=limpiar_mayuscula(datos.IMEI1))          
-                    ws.cell(row=row, column=4, value=limpiar_mayuscula(datos.IMEI2))          
-                    ws.cell(row=row, column=5, value=limpiar_mayuscula(f"{datos.marca} - {datos.MODELO}")) 
-                    
-                    # 🔴 4. REESCRITURA INTELIGENTE de las columnas de costos basadas en el split
-                    # Columna 6 (F) -> Reemplaza el '104-944058' dejando solo el número LARGO '944058'
-                    ws.cell(row=row, column=6, value=info_unidades["C_COSTOS_LARGO"]) 
-                    
-                    # Columna 8 (H) -> Guarda los 3 dígitos cortos extraídos ('104')
-                    ws.cell(row=row, column=8, value=info_unidades["UN2"])
-                    
-                    # Columna 9 (I) -> Guarda el nombre de la unidad (UN) traído con Pandas
-                    ws.cell(row=row, column=9, value=limpiar_mayuscula(info_unidades["UN"]))
-                    
-                    # 📝 5. Guardar el resto de los datos del formulario
-                    ws.cell(row=row, column=10, value=limpiar_titulo(datos.Supervisor))     
-                    ws.cell(row=row, column=11, value=limpiar_mayuscula(datos.Zona_o_Cargo))   
-                    ws.cell(row=row, column=12, value=limpiar_mayuscula(datos.Codigo))        
-                    ws.cell(row=row, column=14, value=limpiar_titulo(datos.Funcionario))   
-                    ws.cell(row=row, column=15, value=limpiar_mayuscula(datos.Bateria))       
-                    ws.cell(row=row, column=16, value=limpiar_mayuscula(datos.Cargador))      
-                    ws.cell(row=row, column=17, value=limpiar_mayuscula(datos.TipoEquipo))    
-                    ws.cell(row=row, column=19, value=limpiar_mayuscula(datos.Novedades))     
-                    ws.cell(row=row, column=22, value=limpiar_mayuscula(datos.Tipo_Plan))     
-                    ws.cell(row=row, column=23, value=limpiar_mayuscula(datos.Costo_Plan))    
-                    ws.cell(row=row, column=24, value=limpiar_mayuscula(datos.Cuenta))        
-                    ws.cell(row=row, column=25, value=limpiar_mayuscula(datos.Nombre_Cuenta)) 
-                    ws.cell(row=row, column=26, value=limpiar_mayuscula(datos.Tipo_Cargo))    
-                    ws.cell(row=row, column=27, value=limpiar_mayuscula(datos.Tipo_Logia))  
-                    ws.cell(row=row, column=29, value=ruta_pdf)            
-                    
-                    print(f"--> [PUT] Fila {row} PROCESADA Y DISTRIBUIDA por split para: {cedula_a_buscar}")
+                    # SALVAGUARDA: solo escribir F, H, I si el cruce fue exitoso
+                    if cruce_exitoso:
+                        ws.cell(row=row, column=6, value=info_unidades["C_COSTOS_LARGO"])  # F
+                        ws.cell(row=row, column=8, value=info_unidades["UN2"])              # H
+                        ws.cell(row=row, column=9, value=info_unidades["UN"])               # I
+                        print(f"  Columnas F, H, I actualizadas con datos del cruce.")
+                    else:
+                        # No se encontro al empleado en la base alimentadora.
+                        # Las columnas F, H, I NO se tocan -> se conservan los datos anteriores.
+                        print(f"  SALVAGUARDA ACTIVA: F, H, I conservadas (cruce sin resultado).")
+
+                    print(f"  Fila {row} ACTUALIZADA para cedula: {cedula_a_buscar}")
                     empleado_encontrado = True
-                    break 
+                    break
 
-        # Caso fila Nueva (Si no existía previamente, no tiene código original, usa lo que envíe la web)
+        # Fila nueva si la cedula no existe en el Excel
         if not empleado_encontrado:
             numero_acta = ws.max_row + 1
             fecha_hoy = date.today().strftime("%d/%m/%Y")
-            
-            # Como es nueva, intenta procesar lo que venga en datos.C_Costos por si acaso tiene guion
-            info_unidades = procesar_cruce_por_columna_u(datos.C_Costos) if datos.C_Costos else {"UN2": "", "C_COSTOS_LARGO": "", "UN": ""}
-            
+
             nueva_fila = [
-                numero_acta, limpiar_mayuscula(datos.Telefono), limpiar_mayuscula(datos.IMEI1), limpiar_mayuscula(datos.IMEI2),
-                limpiar_mayuscula(f"{datos.marca} - {datos.MODELO}"), info_unidades["C_COSTOS_LARGO"], fecha_hoy,
-                info_unidades["UN2"],                   # Columna H (8)
-                limpiar_mayuscula(info_unidades["UN"]),  # Columna I (9)
-                limpiar_titulo(datos.Supervisor), limpiar_titulo(datos.Zona_o_Cargo), limpiar_mayuscula(datos.Codigo),
-                cedula_a_buscar, limpiar_titulo(datos.Funcionario), limpiar_mayuscula(datos.Bateria), limpiar_mayuscula(datos.Cargador),
-                limpiar_mayuscula(datos.TipoEquipo), "", limpiar_mayuscula(datos.Novedades), "ACTIVO", "",
-                limpiar_mayuscula(datos.Tipo_Plan), limpiar_mayuscula(datos.Costo_Plan), limpiar_mayuscula(datos.Cuenta), limpiar_mayuscula(datos.Nombre_Cuenta),
-                limpiar_mayuscula(datos.Tipo_Cargo), limpiar_mayuscula(datos.Tipo_Logia), "", ruta_pdf
+                numero_acta,                                                     # A
+                limpiar_mayuscula(datos.Telefono),                               # B
+                limpiar_mayuscula(datos.IMEI1),                                  # C
+                limpiar_mayuscula(datos.IMEI2),                                  # D
+                limpiar_mayuscula(f"{datos.marca} - {datos.MODELO}"),            # E
+                info_unidades["C_COSTOS_LARGO"] if cruce_exitoso else "",        # F
+                fecha_hoy,                                                        # G
+                info_unidades["UN2"] if cruce_exitoso else "",                   # H
+                info_unidades["UN"] if cruce_exitoso else "",                    # I
+                limpiar_titulo(datos.Supervisor),                                # J
+                limpiar_mayuscula(datos.Zona_o_Cargo),                           # K
+                limpiar_mayuscula(datos.Codigo),                                 # L
+                cedula_a_buscar,                                                  # M
+                limpiar_titulo(datos.Funcionario),                               # N
+                limpiar_mayuscula(datos.Bateria),                                # O
+                limpiar_mayuscula(datos.Cargador),                               # P
+                limpiar_mayuscula(datos.TipoEquipo),                             # Q
+                "",                                                               # R
+                limpiar_mayuscula(datos.Novedades),                              # S
+                "ACTIVO",                                                         # T
+                "",                                                               # U
+                limpiar_mayuscula(datos.Tipo_Plan),                              # V
+                limpiar_mayuscula(datos.Costo_Plan),                             # W
+                limpiar_mayuscula(datos.Cuenta),                                 # X
+                limpiar_mayuscula(datos.Nombre_Cuenta),                          # Y
+                limpiar_mayuscula(datos.Tipo_Cargo),                             # Z
+                limpiar_mayuscula(datos.Tipo_Logia),                             # AA
+                "",                                                               # AB
+                ruta_pdf,                                                         # AC
             ]
             ws.append(nueva_fila)
-            print(f"--> [PUT] Fila NUEVA creada para: {cedula_a_buscar}")
+            print(f" ✅ Fila NUEVA creada para cedula: {cedula_a_buscar}")
 
         wb.save(EXCEL_PATH)
         wb.close()
 
 
+# ================================================================
+# REGISTRO DE DESCUENTOS (hoja "Descuentos")
+# ================================================================
 def agregar_fila_descuento(datos: DatosDescuento):
     with excel_lock:
         if os.path.exists(EXCEL_PATH):
@@ -277,24 +329,30 @@ def agregar_fila_descuento(datos: DatosDescuento):
         else:
             wb = Workbook()
             wb.active.title = "base"
-        
+
         if "Descuentos" in wb.sheetnames:
             ws = wb["Descuentos"]
         else:
             ws = wb.create_sheet(title="Descuentos")
-            ws.append(["Fecha", "Cédula", "Funcionario", "IMEI", "Modelo", "Valor Descuento", "Motivo"])
+            ws.append(["Fecha", "Cedula", "Funcionario", "IMEI", "Modelo", "Valor Descuento", "Motivo"])
 
         fecha_hoy = date.today().strftime("%d/%m/%Y")
-        nueva_fila = [
-            fecha_hoy, datos.Cedula, datos.Funcionario, 
-            datos.IMEI1, datos.MODELO, datos.ValorDescuento, datos.Novedades
-        ]
-        ws.append(nueva_fila)
+        ws.append([
+            fecha_hoy,
+            limpiar_cedula(datos.Cedula),
+            limpiar_titulo(datos.Funcionario),
+            datos.IMEI1,
+            datos.MODELO,
+            datos.ValorDescuento,
+            datos.Novedades,
+        ])
         wb.save(EXCEL_PATH)
         wb.close()
 
 
-# --- ENDPOINTS API ---
+# ================================================================
+# ENDPOINTS API
+# ================================================================
 @app.put("/api/acta")
 async def recibir_acta(datos: DatosActa):
     try:
@@ -325,7 +383,7 @@ async def recibir_acta(datos: DatosActa):
 @app.put("/api/descuento")
 async def recibir_descuento(datos: DatosDescuento):
     try:
-        print(f"--> Petición recibida en /api/descuento para: {datos.Funcionario}")
+        print(f"--> Peticion recibida en /api/descuento para: {datos.Funcionario}")
         agregar_fila_descuento(datos)
         return {"mensaje": "OK: Descuento registrado en el sistema"}
     except Exception as e:
@@ -335,11 +393,15 @@ async def recibir_descuento(datos: DatosDescuento):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --- ARCHIVOS ESTÁTICOS ---
+# ================================================================
+# ARCHIVOS ESTÁTICOS
+# ================================================================
 app.mount("/", StaticFiles(directory="templates", html=True), name="static")
 
 
-# --- ARRANQUE ---
+# ================================================================
+# ARRANQUE
+# ================================================================
 if __name__ == "__main__":
     import uvicorn
     print("----------------------------------------------")
