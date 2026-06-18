@@ -26,9 +26,8 @@ app.add_middleware(
 )
 
 # --- CONFIGURACIÓN ---
-EXCEL_PATH = r"C:\Users\POLLO\OneDrive - Colombiana de Comercio S.A\base actas de entrega.xlsx"
-RUTA_BASE_ALIMENTADORA = r"C:\Users\POLLO\OneDrive - Colombiana de Comercio S.A\report_Planta_de_Personal_Completa__activos_e_inactivos_--colombiana--1010236537--_93bb93e0-54b6-46de-9477-06f6b4e6b9c3 (1).xlsx"
-
+EXCEL_PATH = r"C:\Users\1030650138\OneDrive - Colombiana de Comercio S.A\base actas de entrega.xlsx"
+RUTA_BASE_ALIMENTADORA = r"C:\Users\1030650138\OneDrive - Colombiana de Comercio S.A\report_Planta_de_Personal_Completa__activos_e_inactivos_--colombiana--1010236537--_93bb93e0-54b6-46de-9477-06f6b4e6b9c3 (1).xlsx"
 PDF_FOLDER = "PDFs"
 os.makedirs(PDF_FOLDER, exist_ok=True)
 
@@ -86,6 +85,7 @@ class DatosActa(BaseModel):
     MODELO: Optional[str] = ""
     marca: Optional[str] = ""
     C_Costos: Optional[str] = ""
+    UN: Optional[str] = ""
     Supervisor: Optional[str] = ""
     Zona_o_Cargo: Optional[str] = ""
     Codigo: Optional[str] = ""
@@ -150,7 +150,7 @@ def procesar_cruce_por_cedula(cedula_usuario: str) -> dict:
         columna_cedula = 'Nombre de usuario'
 
         if columna_cedula not in df.columns:
-            print(f" 🚨 No se encontro columna de cedula. Columnas disponibles: {list(df.columns)}")
+            print(f"  No se encontro columna de cedula. Columnas disponibles: {list(df.columns)}")
             return resultado
 
         # Limpiar cedulas de la base alimentadora con la misma funcion estricta
@@ -160,7 +160,7 @@ def procesar_cruce_por_cedula(cedula_usuario: str) -> dict:
         coincidencia = df[df["_cedula_limpia"] == cedula_limpia]
 
         if coincidencia.empty:
-            print(f" ⚠️  Cedula '{cedula_limpia}' NO encontrada en la base alimentadora.")
+            print(f"   Cedula '{cedula_limpia}' NO encontrada en la base alimentadora.")
             return resultado  # None -> salvaguarda activada
 
         fila = coincidencia.iloc[0]
@@ -245,6 +245,7 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                     ws.cell(row=row, column=4,  value=limpiar_mayuscula(datos.IMEI2))
                     ws.cell(row=row, column=5,  value=limpiar_mayuscula(f"{datos.marca} - {datos.MODELO}"))
                     ws.cell(row=row, column=7,  value=fecha_hoy)
+                    ws.cell(row=row, column=9, value="DIBOG")                              
                     ws.cell(row=row, column=10, value=limpiar_titulo(datos.Supervisor))
                     ws.cell(row=row, column=11, value=limpiar_mayuscula(datos.Zona_o_Cargo))
                     ws.cell(row=row, column=12, value=limpiar_mayuscula(datos.Codigo))
@@ -265,12 +266,11 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                     if cruce_exitoso:
                         ws.cell(row=row, column=6, value=info_unidades["C_COSTOS_LARGO"])  # F
                         ws.cell(row=row, column=8, value=info_unidades["UN2"])              # H
-                        ws.cell(row=row, column=9, value=info_unidades["UN"])               # I
-                        print(f"  Columnas F, H, I actualizadas con datos del cruce.")
+                        print(f"  Columnas F, H,  actualizadas con datos del cruce.")
                     else:
                         # No se encontro al empleado en la base alimentadora.
                         # Las columnas F, H, I NO se tocan -> se conservan los datos anteriores.
-                        print(f"  SALVAGUARDA ACTIVA: F, H, I conservadas (cruce sin resultado).")
+                        print(f"  SALVAGUARDA ACTIVA: F, H,  conservadas (cruce sin resultado).")
 
                     print(f"  Fila {row} ACTUALIZADA para cedula: {cedula_a_buscar}")
                     empleado_encontrado = True
@@ -290,7 +290,7 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                 info_unidades["C_COSTOS_LARGO"] if cruce_exitoso else "",        # F
                 fecha_hoy,                                                        # G
                 info_unidades["UN2"] if cruce_exitoso else "",                   # H
-                info_unidades["UN"] if cruce_exitoso else "",                    # I
+                "DIBOG",                                                         # I
                 limpiar_titulo(datos.Supervisor),                                # J
                 limpiar_mayuscula(datos.Zona_o_Cargo),                           # K
                 limpiar_mayuscula(datos.Codigo),                                 # L
@@ -313,7 +313,7 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                 ruta_pdf,                                                         # AC
             ]
             ws.append(nueva_fila)
-            print(f" ✅ Fila NUEVA creada para cedula: {cedula_a_buscar}")
+            print(f"  Fila NUEVA creada para cedula: {cedula_a_buscar}")
 
         wb.save(EXCEL_PATH)
         wb.close()
