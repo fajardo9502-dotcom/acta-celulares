@@ -253,7 +253,7 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                     ws.cell(row=row, column=15, value=limpiar_mayuscula(datos.Bateria))
                     ws.cell(row=row, column=16, value=limpiar_mayuscula(datos.Cargador))
                     ws.cell(row=row, column=17, value=limpiar_mayuscula(datos.TipoEquipo))
-                    ws.cell(row=row, column=19, value=limpiar_mayuscula(datos.Novedades))
+                   
                     ws.cell(row=row, column=22, value=limpiar_mayuscula(datos.Tipo_Plan))
                     ws.cell(row=row, column=23, value=limpiar_mayuscula(datos.Costo_Plan))
                     ws.cell(row=row, column=24, value=limpiar_mayuscula(datos.Cuenta))
@@ -266,6 +266,7 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                     if cruce_exitoso:
                         ws.cell(row=row, column=6, value=info_unidades["C_COSTOS_LARGO"])  # F
                         ws.cell(row=row, column=8, value=info_unidades["UN2"])              # H
+                        ws.cell(row=row, column=19, value=info_unidades["Estado"])
                         print(f"  Columnas F, H,  actualizadas con datos del cruce.")
                     else:
                         # No se encontro al empleado en la base alimentadora.
@@ -301,7 +302,7 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                 limpiar_mayuscula(datos.TipoEquipo),                             # Q
                 "",                                                               # R
                 limpiar_mayuscula(datos.Novedades),                              # S
-                "ACTIVO",                                                         # T
+                info_unidades["Estado"] if cruce_exitoso else "",                 #t                                      # T
                 "",                                                               # U
                 limpiar_mayuscula(datos.Tipo_Plan),                              # V
                 limpiar_mayuscula(datos.Costo_Plan),                             # W
