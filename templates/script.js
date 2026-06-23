@@ -144,6 +144,7 @@ document.getElementById('formActa').addEventListener('submit', async (event) => 
         Funcionario:   capitalizarTexto(campos.get('Funcionario')),
         Cedula:        campos.get('Cedula') ? campos.get('Cedula').toString().trim() : "",
         MODELO:        limpiarTextoMayuscula(campos.get('MODELO')),
+        TIPOEQUIPO:    limpiarTextoMayuscula(campos.get('TIPOEQUIPO')),
         marca:         limpiarTextoMayuscula(campos.get('marca')),
         IMEI1:         limpiarTextoMayuscula(campos.get('IMEI1')),
         IMEI2:         limpiarTextoMayuscula(campos.get('IMEI2')),

@@ -93,7 +93,7 @@ class DatosActa(BaseModel):
     Funcionario: Optional[str] = ""
     Bateria: Optional[str] = "No"
     Cargador: Optional[str] = ""
-    TipoEquipo: Optional[str] = ""
+    TIPOEQUIPO: Optional[str] = ""
     Novedades: Optional[str] = ""
     Tipo_Plan: Optional[str] = ""
     Costo_Plan: Optional[str] = ""
@@ -252,7 +252,7 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                     ws.cell(row=row, column=14, value=limpiar_titulo(datos.Funcionario))
                     ws.cell(row=row, column=15, value=limpiar_mayuscula(datos.Bateria))
                     ws.cell(row=row, column=16, value=limpiar_mayuscula(datos.Cargador))
-                    ws.cell(row=row, column=17, value=limpiar_mayuscula(datos.TipoEquipo))
+                    ws.cell(row=row, column=17, value=limpiar_mayuscula(datos.TIPOEQUIPO))
                    
                     ws.cell(row=row, column=22, value=limpiar_mayuscula(datos.Tipo_Plan))
                     ws.cell(row=row, column=23, value=limpiar_mayuscula(datos.Costo_Plan))
@@ -299,7 +299,7 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                 limpiar_titulo(datos.Funcionario),                               # N
                 limpiar_mayuscula(datos.Bateria),                                # O
                 limpiar_mayuscula(datos.Cargador),                               # P
-                limpiar_mayuscula(datos.TipoEquipo),                             # Q
+                limpiar_mayuscula(datos.TIPOEQUIPO),                             # Q
                 "",                                                               # R
                 limpiar_mayuscula(datos.Novedades),                              # S
                 info_unidades["Estado"] if cruce_exitoso else "",                 #t                                      # T
