@@ -252,7 +252,7 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                     ws.cell(row=row, column=14, value=limpiar_titulo(datos.Funcionario))
                     ws.cell(row=row, column=15, value=limpiar_mayuscula(datos.Bateria))
                     ws.cell(row=row, column=16, value=limpiar_mayuscula(datos.Cargador))
-                    ws.cell(row=row, column=17, value=limpiar_mayuscula(datos.TIPOEQUIPO))
+                    ws.cell(row=row, column=18, value=limpiar_mayuscula(datos.TIPOEQUIPO))
                    
                     ws.cell(row=row, column=22, value=limpiar_mayuscula(datos.Tipo_Plan))
                     ws.cell(row=row, column=23, value=limpiar_mayuscula(datos.Costo_Plan))
@@ -262,7 +262,7 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                     ws.cell(row=row, column=27, value=limpiar_mayuscula(datos.Tipo_Logia))
                     ws.cell(row=row, column=29, value=ruta_pdf)
 
-                    # SALVAGUARDA: solo escribir F, H, I si el cruce fue exitoso
+                    # SALVAGUARDA: solo escribir F, H si el cruce fue exitoso
                     if cruce_exitoso:
                         ws.cell(row=row, column=6, value=info_unidades["C_COSTOS_LARGO"])  # F
                         ws.cell(row=row, column=8, value=info_unidades["UN2"])              # H
@@ -283,36 +283,36 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
             fecha_hoy = date.today().strftime("%d/%m/%Y")
 
             nueva_fila = [
-                numero_acta,                                                     # A
-                limpiar_mayuscula(datos.Telefono),                               # B
-                limpiar_mayuscula(datos.IMEI1),                                  # C
-                limpiar_mayuscula(datos.IMEI2),                                  # D
-                limpiar_mayuscula(f"{datos.marca} - {datos.MODELO}"),            # E
-                info_unidades["C_COSTOS_LARGO"] if cruce_exitoso else "",        # F
-                fecha_hoy,                                                        # G
-                info_unidades["UN2"] if cruce_exitoso else "",                   # H
-                "DIBOG",                                                         # I
-                limpiar_titulo(datos.Supervisor),                                # J
-                limpiar_mayuscula(datos.Zona_o_Cargo),                           # K
-                limpiar_mayuscula(datos.Codigo),                                 # L
-                cedula_a_buscar,                                                  # M
-                limpiar_titulo(datos.Funcionario),                               # N
-                limpiar_mayuscula(datos.Bateria),                                # O
-                limpiar_mayuscula(datos.Cargador),                               # P
-                limpiar_mayuscula(datos.TIPOEQUIPO),                             # Q
-                "",                                                               # R
-                limpiar_mayuscula(datos.Novedades),                              # S
-                info_unidades["Estado"] if cruce_exitoso else "",                 #t                                      # T
-                "",                                                               # U
-                limpiar_mayuscula(datos.Tipo_Plan),                              # V
-                limpiar_mayuscula(datos.Costo_Plan),                             # W
-                limpiar_mayuscula(datos.Cuenta),                                 # X
-                limpiar_mayuscula(datos.Nombre_Cuenta),                          # Y
-                limpiar_mayuscula(datos.Tipo_Cargo),                             # Z
-                limpiar_mayuscula(datos.Tipo_Logia),                             # AA
-                "",                                                               # AB
-                ruta_pdf,                                                         # AC
-            ]
+            numero_acta,                                                     # A
+            limpiar_mayuscula(datos.Telefono),                               # B
+            limpiar_mayuscula(datos.IMEI1),                                  # C
+            limpiar_mayuscula(datos.IMEI2),                                  # D
+            limpiar_mayuscula(f"{datos.marca} - {datos.MODELO}"),            # E
+            info_unidades["C_COSTOS_LARGO"] if cruce_exitoso else "",        # F
+            fecha_hoy,                                                        # G
+            info_unidades["UN2"] if cruce_exitoso else "",                   # H
+            "DIBOG",                                                         # I
+            limpiar_titulo(datos.Supervisor),                                # J
+            limpiar_mayuscula(datos.Zona_o_Cargo),                           # K
+            limpiar_mayuscula(datos.Codigo),                                 # L
+            cedula_a_buscar,                                                  # M
+            limpiar_titulo(datos.Funcionario),                               # N
+            limpiar_mayuscula(datos.Bateria),                                # O
+            limpiar_mayuscula(datos.Cargador),                               # P
+            "",                                                              # Q
+            limpiar_mayuscula(datos.TIPOEQUIPO),                             # R
+            limpiar_mayuscula(datos.Novedades),                              # S
+            info_unidades["Estado"] if cruce_exitoso else "",                 # T
+            "",                                                               # U
+            limpiar_mayuscula(datos.Tipo_Plan),                              # V
+            limpiar_mayuscula(datos.Costo_Plan),                             # W
+            limpiar_mayuscula(datos.Cuenta),                                 # X
+            limpiar_mayuscula(datos.Nombre_Cuenta),                          # Y
+            limpiar_mayuscula(datos.Tipo_Cargo),                             # Z
+            limpiar_mayuscula(datos.Tipo_Logia),                             # AA
+            "",                                                               # AB
+            ruta_pdf,                                                         # AC
+        ]
             ws.append(nueva_fila)
             print(f"  Fila NUEVA creada para cedula: {cedula_a_buscar}")
 
