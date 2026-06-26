@@ -120,16 +120,17 @@ class DatosDescuento(BaseModel):
 def procesar_cruce_por_cedula(cedula_usuario: str) -> dict:
     """
     Busca al empleado en la base alimentadora por su cédula.
-    Retorna un diccionario con tres claves:
+    Retorna un diccionario con cuatro claves:
         - "UN2":            parte corta del centro de costos (ej: "104")
         - "C_COSTOS_LARGO": parte larga del centro de costos (ej: "944058")
         - "UN":             nombre de la unidad organizativa
+        - "Tipo_Logia":     Nombre del cargo extraído de la columna H (Base Alimentadora)
 
-    IMPORTANTE: Si NO encuentra al empleado, las tres claves vienen
-    como None (no como "") para que la función de escritura sepa que
-    debe CONSERVAR lo que ya habia en el Excel (salvaguarda de datos).
+    IMPORTANTE: Si NO encuentra al empleado, las claves vienen
+    como None para que la función de escritura active la salvaguarda de datos.
     """
-    resultado = {"UN2": None, "C_COSTOS_LARGO": None, "UN": None}
+    # Agregamos "Tipo_Logia" inicializado en None para la salvaguarda
+    resultado = {"UN2": None, "C_COSTOS_LARGO": None, "UN": None, "Tipo_Logia": None}
 
     cedula_limpia = limpiar_cedula(cedula_usuario)
     if not cedula_limpia:
@@ -141,31 +142,25 @@ def procesar_cruce_por_cedula(cedula_usuario: str) -> dict:
         return resultado
 
     try:
-        # Leer toda la base como texto para evitar que Pandas convierta
-        # cedulas a float (1030650138.0) y rompa el cruce
         df = pd.read_excel(RUTA_BASE_ALIMENTADORA, sheet_name="Planta de Personal_Completa (ac", dtype=str)
         df.columns = df.columns.str.strip()
 
-        # La columna de cedula en esta base es 'Nombre de usuario'
         columna_cedula = 'Nombre de usuario'
 
         if columna_cedula not in df.columns:
             print(f"  No se encontro columna de cedula. Columnas disponibles: {list(df.columns)}")
             return resultado
 
-        # Limpiar cedulas de la base alimentadora con la misma funcion estricta
         df["_cedula_limpia"] = df[columna_cedula].apply(limpiar_cedula)
-
-        # Buscar coincidencia exacta
         coincidencia = df[df["_cedula_limpia"] == cedula_limpia]
 
         if coincidencia.empty:
             print(f"   Cedula '{cedula_limpia}' NO encontrada en la base alimentadora.")
-            return resultado  # None -> salvaguarda activada
+            return resultado  
 
         fila = coincidencia.iloc[0]
 
-        # Extraer Centro de Costos Codigo
+        # --- [CRUCE ORIGINAL] Centro de Costos ---
         columna_cc = "Centro de costos Código"
         if columna_cc in df.columns:
             valor_cc = str(fila.get(columna_cc, "")).strip()
@@ -182,7 +177,7 @@ def procesar_cruce_por_cedula(cedula_usuario: str) -> dict:
         else:
             print(f"   Columna '{columna_cc}' no encontrada en la base alimentadora.")
 
-        # Extraer nombre de la Unidad (UN)
+        # --- [CRUCE ORIGINAL] Nombre de la Unidad (UN) ---
         columna_un = "Unidad Estratégica de Negocio Nombre"
         if columna_un in df.columns:
             valor_un = str(fila.get(columna_un, "")).strip()
@@ -190,14 +185,22 @@ def procesar_cruce_por_cedula(cedula_usuario: str) -> dict:
         else:
             resultado["UN"] = ""
 
-        print(f"  [Cruce OK] Cedula: {cedula_limpia} -> "
-              f"UN2: {resultado['UN2']} | C.Costos: {resultado['C_COSTOS_LARGO']} | UN: {resultado['UN']}")
+        # --- [NUEVO CRUCE] Extraer columna H (Cargo) ---
+        columna_cargo = "Código de cargo Nombre de cargo (1)"
+        if columna_cargo in df.columns:
+            valor_cargo = str(fila.get(columna_cargo, "")).strip()
+            resultado["Tipo_Logia"] = "" if valor_cargo.lower() in ("nan", "none") else valor_cargo.upper()
+        else:
+            print(f"   Columna '{columna_cargo}' no encontrada en la base alimentadora. Se asigna vacio.")
+            resultado["Tipo_Logia"] = ""
+
+        print(f"   [Cruce OK] Cedula: {cedula_limpia} -> "
+              f"UN2: {resultado['UN2']} | C.Costos: {resultado['C_COSTOS_LARGO']} | Cargo (AA): {resultado['Tipo_Logia']}")
         return resultado
 
     except Exception as e:
-        print(f"  Error en procesar_cruce_por_cedula: {e}")
-        return resultado  # En caso de error tambien conservamos los datos viejos
-
+        print(f"   Error en procesar_cruce_por_cedula: {e}")
+        return resultado
 
 # ================================================================
 # GENERADOR DE NOMBRE DE PDF
@@ -211,41 +214,63 @@ def generar_nombre_pdf(datos: DatosActa) -> str:
 # ================================================================
 # ACTUALIZACIÓN DEL EXCEL DE ACTAS (hoja principal "base")
 # ================================================================
+ 
 def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
+    """
+    Actualiza o crea una fila en el Excel de actas basada en la cédula del empleado.
+    
+    GARANTÍAS:
+    1. Novedades SIEMPRE va a columna 19 (S)
+    2. Tipo_Logia va a columna 27 (AA):
+       - Si cruce exitoso Y cargo en base: usa base alimentadora
+       - Si cruce falla O cargo vacío: usa datos.Tipo_Logia del formulario
+    3. Salvaguarda activada: Si cédula no existe en planta, F y H NO se tocan
+    """
     with excel_lock:
         if os.path.exists(EXCEL_PATH):
             wb = load_workbook(EXCEL_PATH)
         else:
             wb = Workbook()
             wb.active.title = "base"
-
+ 
         ws = wb.active
-        # Limpiar la cedula entrante con la funcion estricta
         cedula_a_buscar = limpiar_cedula(datos.Cedula)
         empleado_encontrado = False
-
-        # Cruce con la base alimentadora
+ 
+        # === PASO 1: CRUCE CON BASE ALIMENTADORA ===
         info_unidades = procesar_cruce_por_cedula(cedula_a_buscar)
-        # cruce_exitoso es True SOLO si encontro al empleado (valores no son None)
         cruce_exitoso = info_unidades["UN2"] is not None
-
-        # Buscar la fila en el Excel de actas
+ 
+        # === PASO 2: DETERMINAR TIPO_LOGIA FINAL ===
+        # Prioridad:
+        # 1. Si cruce exitoso Y base alimentadora tiene cargo → usar base alimentadora
+        # 2. Si no → usar lo que viene del formulario web
+        tipo_logia_final = ""
+        if cruce_exitoso and info_unidades.get("Tipo_Logia"):
+            tipo_logia_final = info_unidades["Tipo_Logia"]
+            print(f"   [Tipo_Logia] Usando valor de base alimentadora: {tipo_logia_final}")
+        elif datos.Tipo_Logia:
+            tipo_logia_final = datos.Tipo_Logia
+            print(f"   [Tipo_Logia] Usando valor del formulario web: {tipo_logia_final}")
+        else:
+            print(f"   [Tipo_Logia] Sin valor disponible (quedará vacío)")
+ 
+        # === PASO 3: BUSCAR FILA EXISTENTE POR CÉDULA ===
         if ws.max_row >= 2 and cedula_a_buscar:
             for row in range(2, ws.max_row + 1):
-                # Limpiar la cedula del Excel con la misma funcion para evitar
-                # el problema de "1030650138.0" vs "1030650138"
                 cedula_celda = limpiar_cedula(ws.cell(row=row, column=13).value)
-
+ 
                 if cedula_celda == cedula_a_buscar:
+                    # FILA ENCONTRADA: ACTUALIZAR EXISTENTE
                     fecha_hoy = date.today().strftime("%d/%m/%Y")
-
-                    # Datos que SIEMPRE se actualizan (vienen del formulario web)
+ 
+                    # Datos del formulario web (SIEMPRE se actualizan)
                     ws.cell(row=row, column=2,  value=limpiar_mayuscula(datos.Telefono))
                     ws.cell(row=row, column=3,  value=limpiar_mayuscula(datos.IMEI1))
                     ws.cell(row=row, column=4,  value=limpiar_mayuscula(datos.IMEI2))
                     ws.cell(row=row, column=5,  value=limpiar_mayuscula(f"{datos.marca} - {datos.MODELO}"))
                     ws.cell(row=row, column=7,  value=fecha_hoy)
-                    ws.cell(row=row, column=9, value="DIBOG")                              
+                    ws.cell(row=row, column=9,  value="DIBOG")
                     ws.cell(row=row, column=10, value=limpiar_titulo(datos.Supervisor))
                     ws.cell(row=row, column=11, value=limpiar_mayuscula(datos.Zona_o_Cargo))
                     ws.cell(row=row, column=12, value=limpiar_mayuscula(datos.Codigo))
@@ -253,72 +278,82 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                     ws.cell(row=row, column=15, value=limpiar_mayuscula(datos.Bateria))
                     ws.cell(row=row, column=16, value=limpiar_mayuscula(datos.Cargador))
                     ws.cell(row=row, column=18, value=limpiar_mayuscula(datos.TIPOEQUIPO))
-                   
+                    
+                    # NOVEDADES EN COLUMNA 19 (S) - GARANTIZADO
+                    ws.cell(row=row, column=19, value=limpiar_mayuscula(datos.Novedades))
+                    print(f"   [Columna S] Novedades guardadas: {datos.Novedades}")
+                    
                     ws.cell(row=row, column=22, value=limpiar_mayuscula(datos.Tipo_Plan))
                     ws.cell(row=row, column=23, value=limpiar_mayuscula(datos.Costo_Plan))
                     ws.cell(row=row, column=24, value=limpiar_mayuscula(datos.Cuenta))
                     ws.cell(row=row, column=25, value=limpiar_mayuscula(datos.Nombre_Cuenta))
                     ws.cell(row=row, column=26, value=limpiar_mayuscula(datos.Tipo_Cargo))
-                    ws.cell(row=row, column=27, value=limpiar_mayuscula(datos.Tipo_Logia))
+                    
+                    # TIPO_LOGIA EN COLUMNA 27 (AA) - GARANTIZADO
+                    ws.cell(row=row, column=27, value=limpiar_mayuscula(tipo_logia_final))
+                    print(f"   [Columna AA] Tipo_Logia guardado: {tipo_logia_final}")
+                    
                     ws.cell(row=row, column=29, value=ruta_pdf)
-
-                    # SALVAGUARDA: solo escribir F, H si el cruce fue exitoso
+ 
+                    # SALVAGUARDA: Solo tocar F y H si cruce fue exitoso
                     if cruce_exitoso:
                         ws.cell(row=row, column=6, value=info_unidades["C_COSTOS_LARGO"])  # F
                         ws.cell(row=row, column=8, value=info_unidades["UN2"])              # H
-                        ws.cell(row=row, column=19, value=info_unidades["Estado"])
-                        print(f"  Columnas F, H,  actualizadas con datos del cruce.")
+                        print(f"   [Cruce Exitoso] Columnas F, H actualizadas.")
                     else:
-                        # No se encontro al empleado en la base alimentadora.
-                        # Las columnas F, H, I NO se tocan -> se conservan los datos anteriores.
-                        print(f"  SALVAGUARDA ACTIVA: F, H,  conservadas (cruce sin resultado).")
-
-                    print(f"  Fila {row} ACTUALIZADA para cedula: {cedula_a_buscar}")
+                        print(f"    [Salvaguarda] Cédula no en planta. Columnas F, H preservadas.")
+ 
+                    print(f"   Fila {row} ACTUALIZADA para cédula: {cedula_a_buscar}")
                     empleado_encontrado = True
                     break
-
-        # Fila nueva si la cedula no existe en el Excel
+ 
+        # === PASO 4: CREAR FILA NUEVA SI NO EXISTE ===
         if not empleado_encontrado:
             numero_acta = ws.max_row + 1
             fecha_hoy = date.today().strftime("%d/%m/%Y")
-
+ 
+            # Armar la lista nueva_fila con TODOS los datos en orden exacto
             nueva_fila = [
-            numero_acta,                                                     # A
-            limpiar_mayuscula(datos.Telefono),                               # B
-            limpiar_mayuscula(datos.IMEI1),                                  # C
-            limpiar_mayuscula(datos.IMEI2),                                  # D
-            limpiar_mayuscula(f"{datos.marca} - {datos.MODELO}"),            # E
-            info_unidades["C_COSTOS_LARGO"] if cruce_exitoso else "",        # F
-            fecha_hoy,                                                        # G
-            info_unidades["UN2"] if cruce_exitoso else "",                   # H
-            "DIBOG",                                                         # I
-            limpiar_titulo(datos.Supervisor),                                # J
-            limpiar_mayuscula(datos.Zona_o_Cargo),                           # K
-            limpiar_mayuscula(datos.Codigo),                                 # L
-            cedula_a_buscar,                                                  # M
-            limpiar_titulo(datos.Funcionario),                               # N
-            limpiar_mayuscula(datos.Bateria),                                # O
-            limpiar_mayuscula(datos.Cargador),                               # P
-            "",                                                              # Q
-            limpiar_mayuscula(datos.TIPOEQUIPO),                             # R
-            limpiar_mayuscula(datos.Novedades),                              # S
-            info_unidades["Estado"] if cruce_exitoso else "",                 # T
-            "",                                                               # U
-            limpiar_mayuscula(datos.Tipo_Plan),                              # V
-            limpiar_mayuscula(datos.Costo_Plan),                             # W
-            limpiar_mayuscula(datos.Cuenta),                                 # X
-            limpiar_mayuscula(datos.Nombre_Cuenta),                          # Y
-            limpiar_mayuscula(datos.Tipo_Cargo),                             # Z
-            limpiar_mayuscula(datos.Tipo_Logia),                             # AA
-            "",                                                               # AB
-            ruta_pdf,                                                         # AC
-        ]
+                numero_acta,                                                     # A  (1)
+                limpiar_mayuscula(datos.Telefono),                               # B  (2)
+                limpiar_mayuscula(datos.IMEI1),                                  # C  (3)
+                limpiar_mayuscula(datos.IMEI2),                                  # D  (4)
+                limpiar_mayuscula(f"{datos.marca} - {datos.MODELO}"),            # E  (5)
+                info_unidades["C_COSTOS_LARGO"] if cruce_exitoso else "",        # F  (6)
+                fecha_hoy,                                                       # G  (7)
+                info_unidades["UN2"] if cruce_exitoso else "",                   # H  (8)
+                "DIBOG",                                                         # I  (9)
+                limpiar_titulo(datos.Supervisor),                                # J  (10)
+                limpiar_mayuscula(datos.Zona_o_Cargo),                           # K  (11)
+                limpiar_mayuscula(datos.Codigo),                                 # L  (12)
+                cedula_a_buscar,                                                 # M  (13)
+                limpiar_titulo(datos.Funcionario),                               # N  (14)
+                limpiar_mayuscula(datos.Bateria),                                # O  (15)
+                limpiar_mayuscula(datos.Cargador),                               # P  (16)
+                "",                                                              # Q  (17)
+                limpiar_mayuscula(datos.TIPOEQUIPO),                             # R  (18)
+                limpiar_mayuscula(datos.Novedades),                              # S  (19) ← GARANTIZADO
+                "",                                                              # T  (20)
+                "",                                                              # U  (21)
+                limpiar_mayuscula(datos.Tipo_Plan),                              # V  (22)
+                limpiar_mayuscula(datos.Costo_Plan),                             # W  (23)
+                limpiar_mayuscula(datos.Cuenta),                                 # X  (24)
+                limpiar_mayuscula(datos.Nombre_Cuenta),                          # Y  (25)
+                limpiar_mayuscula(datos.Tipo_Cargo),                             # Z  (26)
+                limpiar_mayuscula(tipo_logia_final),                             # AA (27) ← GARANTIZADO
+                "",                                                              # AB (28)
+                ruta_pdf,                                                        # AC (29)
+            ]
+            
             ws.append(nueva_fila)
-            print(f"  Fila NUEVA creada para cedula: {cedula_a_buscar}")
-
+            print(f"    Fila NUEVA creada para cédula: {cedula_a_buscar}")
+            print(f"      - Novedades (S): {datos.Novedades}")
+            print(f"      - Tipo_Logia (AA): {tipo_logia_final}")
+ 
+        # === PASO 5: GUARDAR ===
         wb.save(EXCEL_PATH)
         wb.close()
-
+        print(f"    Excel guardado exitosamente")
 
 # ================================================================
 # REGISTRO DE DESCUENTOS (hoja "Descuentos")

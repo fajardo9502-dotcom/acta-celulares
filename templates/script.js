@@ -128,7 +128,7 @@ document.getElementById('formActa').addEventListener('submit', async (event) => 
     }
 
     // ------------------------------------------------------------
-    // PASO 1 (De Claude): Captura FormData antes de mutar el DOM
+    // PASO 1 : Captura FormData antes de mutar el DOM
     // ------------------------------------------------------------
     const campos = new FormData(document.getElementById('formActa'));
 
@@ -148,7 +148,7 @@ document.getElementById('formActa').addEventListener('submit', async (event) => 
     };
 
     // ------------------------------------------------------------
-    // PASO 2 (De Claude): Estructura el objeto datos en memoria
+    // PASO 2 : Estructura el objeto datos en memoria
     // ------------------------------------------------------------
     const datos = {
         Funcionario:   capitalizarTexto(campos.get('Funcionario')),
@@ -168,7 +168,7 @@ document.getElementById('formActa').addEventListener('submit', async (event) => 
     };
 
     // ------------------------------------------------------------
-    // PASO 3 (De Claude): Genera el render del PDF y despacha
+    // PASO 3 : Genera el render del PDF y despacha
     // ------------------------------------------------------------
     try {
         console.log("Estructura de datos asegurada. Renderizando documento...");
