@@ -145,7 +145,7 @@ def procesar_cruce_por_cedula(cedula_usuario: str) -> dict:
         df = pd.read_excel(RUTA_BASE_ALIMENTADORA, sheet_name="Planta de Personal_Completa (ac", dtype=str)
         df.columns = df.columns.str.strip()
 
-        columna_cedula = 'Nombre de usuario'
+        columna_cedula = 'Nombre de usuario (0)'
 
         if columna_cedula not in df.columns:
             print(f"  No se encontro columna de cedula. Columnas disponibles: {list(df.columns)}")

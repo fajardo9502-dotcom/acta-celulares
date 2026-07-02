@@ -165,6 +165,7 @@ document.getElementById('formActa').addEventListener('submit', async (event) => 
         Codigo:        limpiarTextoMayuscula(campos.get('Código')),
         firma_digital: inputFirma.value, // Datos binarios de firma resguardados
         Novedades:     capitalizarTexto(campos.get('novedades')),
+        Tipo_Logia:    "",
     };
 
     // ------------------------------------------------------------
