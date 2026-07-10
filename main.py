@@ -359,7 +359,7 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                     ws.cell(row=row, column=4,  value=limpiar_mayuscula(datos.IMEI2))            # D
                     ws.cell(row=row, column=5,  value=limpiar_mayuscula(f"{datos.marca} - {datos.MODELO}")) # E
                     ws.cell(row=row, column=7,  value=fecha_hoy)                                 # G
-                    ws.cell(row=row, column=9,  value="DIBOG")                                   # I
+                    ws.cell(row=row, column=9,  value=limpiar_mayuscula(datos.UN))                                   # I
                     ws.cell(row=row, column=10, value=limpiar_titulo(datos.Supervisor))          # J
                     ws.cell(row=row, column=11, value=limpiar_mayuscula(datos.Zona_o_Cargo))     # K
                     ws.cell(row=row, column=12, value=limpiar_mayuscula(datos.Codigo))           # L
@@ -426,7 +426,7 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                 info_unidades["C_COSTOS_LARGO"] if cruce_exitoso else "",        # F  (6)
                 fecha_hoy,                                                       # G  (7)
                 info_unidades["UN2"] if cruce_exitoso else "",                   # H  (8)
-                "DIBOG",                                                         # I  (9)
+                limpiar_mayuscula(datos.UN),                                     # I  (9)                     # I  (9)
                 limpiar_titulo(datos.Supervisor),                                # J  (10)
                 limpiar_mayuscula(datos.Zona_o_Cargo),                           # K  (11)
                 limpiar_mayuscula(datos.Codigo),                                 # L  (12)
