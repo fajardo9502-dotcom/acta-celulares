@@ -29,6 +29,7 @@ app.add_middleware(
 EXCEL_PATH = r"C:\Users\1030650138\OneDrive - Colombiana de Comercio S.A\base actas de entrega.xlsx"
 RUTA_BASE_ALIMENTADORA = r"C:\Users\1030650138\OneDrive - Colombiana de Comercio S.A\report_Planta_de_Personal_Completa__activos_e_inactivos_--colombiana--1010236537--_93bb93e0-54b6-46de-9477-06f6b4e6b9c3 (1).xlsx"
 RUTA_BASE_TIPOLOGIAS = r"C:\Users\1030650138\OneDrive - Colombiana de Comercio S.A\Base Fabi.xlsx"
+RUTA_BASE_EQUIPOS_HISTORICO = r"C:\Users\1030650138\OneDrive - Colombiana de Comercio S.A\Base Historicos Fabi.xlsx"
 PDF_FOLDER = "PDFs"
 os.makedirs(PDF_FOLDER, exist_ok=True)
 
@@ -297,12 +298,152 @@ def generar_nombre_pdf(datos: DatosActa) -> str:
     fecha = date.today().strftime("%Y%m%d")
     return f"acta_{cedula}_{fecha}.pdf"
 
+# ================================================================
+# FUNCIÓN DE CRUCE POR IMEI (Buscando en la Base de Equipos fabi)
+# VERSIONES CORREGIDAS CON OPENPYXL (Sincronización Total)
+# ================================================================
+
+def obtener_anterior_usuario_por_imei(imei_buscado: str) -> str:
+    """
+    Busca en la Base de Equipos (Histórico) por 'IMEI1' usando openpyxl para evitar
+    conflictos de caché con Pandas, y retorna los dos últimos usuarios.
+    """
+    if not imei_buscado:
+        return ""
+        
+    if not os.path.exists(RUTA_BASE_EQUIPOS_HISTORICO):
+        print(f"    [Cruce IMEI] Error: No se encontró la base de equipos en: {RUTA_BASE_EQUIPOS_HISTORICO}")
+        return ""
+
+    try:
+        # Usamos openpyxl con el bloqueo para leer el estado exacto en disco
+        with excel_lock:
+            wb = load_workbook(RUTA_BASE_EQUIPOS_HISTORICO, read_only=True)
+            ws = wb.active
+            
+            # Leer cabeceras para ubicar columnas de forma dinámica
+            cabeceras = [str(cell.value).strip() if cell.value is not None else "" for cell in ws[1]]
+            
+            # Buscamos índices (1-based para openpyxl)
+            def buscar_indice(nombres_posibles):
+                for nombre in nombres_posibles:
+                    for i, cabecera in enumerate(cabeceras):
+                        if cabecera.lower() == nombre.lower():
+                            return i + 1
+                return None
+
+            col_imei_idx = buscar_indice(["imei1", "imei"])
+            col_cedula_idx = buscar_indice(["cedula", "cédula", "documento"])
+            col_nombre_idx = buscar_indice(["nombre", "funcionario", "nombre completo"])
+            col_fecha_idx = buscar_indice(["fecha", "fecha_entrega"])
+
+            # Validación de columnas críticas
+            if not col_imei_idx:
+                print(f"    [Cruce IMEI] Error: No se encontró la columna de IMEI en {cabeceras}")
+                wb.close()
+                return ""
+
+            busqueda = str(imei_buscado).strip()
+            coincidencias = []
+
+            # Recorremos las filas de forma segura
+            for row in range(2, ws.max_row + 1):
+                val_imei = str(ws.cell(row=row, column=col_imei_idx).value or "").strip()
+                if val_imei == busqueda:
+                    cedula = str(ws.cell(row=row, column=col_cedula_idx).value or "").strip() if col_cedula_idx else ""
+                    nombre = str(ws.cell(row=row, column=col_nombre_idx).value or "").strip() if col_nombre_idx else ""
+                    fecha = str(ws.cell(row=row, column=col_fecha_idx).value or "").strip() if col_fecha_idx else ""
+
+                    # Evitar nulos de excel
+                    cedula = "" if cedula.lower() in ("nan", "none") else cedula
+                    nombre = "" if nombre.lower() in ("nan", "none") else nombre.upper()
+                    fecha = "" if fecha.lower() in ("nan", "none") else fecha
+
+                    if cedula or nombre:
+                        coincidencias.append(f"{cedula} | {nombre} | {fecha}")
+
+            wb.close()
+
+            if coincidencias:
+                # Tomamos las últimas dos coincidencias reales del archivo
+                ultimas_dos = coincidencias[-2:] if len(coincidencias) >= 2 else coincidencias
+                
+                if len(ultimas_dos) == 2:
+                    historial_doble = f"{ultimas_dos[0]}  <---  {ultimas_dos[1]}"
+                    print(f"    [Cruce IMEI OK] Encontrado historial doble: {historial_doble}")
+                    return historial_doble
+                else:
+                    print(f"    [Cruce IMEI OK] Encontrado único dueño previo: {ultimas_dos[0]}")
+                    return ultimas_dos[0]
+            else:
+                print(f"    [Cruce IMEI] IMEI '{busqueda}' no tiene registros previos en histórico.")
+                return ""
+
+    except Exception as e:
+        print(f"    Error crítico leyendo histórico con openpyxl: {str(e)}")
+        return ""
+
+
+def registrar_en_base_historicos(imei: str, cedula: str, nombre: str):
+    """
+    Agrega una nueva fila garantizando el guardado inmediato en disco.
+    """
+    if not imei:
+        return
+
+    if not os.path.exists(RUTA_BASE_EQUIPOS_HISTORICO):
+        print(f"    [Histórico] Error: Archivo no existe en: {RUTA_BASE_EQUIPOS_HISTORICO}")
+        return
+
+    try:
+        with excel_lock:
+            wb = load_workbook(RUTA_BASE_EQUIPOS_HISTORICO)
+            ws = wb.active 
+            
+            fecha_hoy = date.today().strftime("%d/%m/%Y")
+            
+            imei_limpio = str(imei).strip()
+            cedula_limpia = str(cedula).strip()
+            nombre_limpio = str(nombre).strip().upper()
+            
+            # Mapeamos dinámicamente las cabeceras existentes
+            cabeceras = [str(cell.value).strip() if cell.value is not None else "" for cell in ws[1]]
+            
+            def buscar_indice(nombres_posibles, default_col):
+                for nombre in nombres_posibles:
+                    for i, cabecera in enumerate(cabeceras):
+                        if cabecera.lower() == nombre.lower():
+                            return i + 1
+                return default_col
+
+            col_imei_idx = buscar_indice(["imei1", "imei"], 1)
+            col_cedula_idx = buscar_indice(["cedula", "cédula", "documento"], 2)
+            col_nombre_idx = buscar_indice(["nombre", "funcionario", "nombre completo"], 3)
+            col_fecha_idx = buscar_indice(["fecha", "fecha_entrega"], 4)
+            
+            nueva_fila = ws.max_row + 1
+            
+            # Escribir los datos
+            ws.cell(row=nueva_fila, column=col_imei_idx, value=imei_limpio)
+            ws.cell(row=nueva_fila, column=col_cedula_idx, value=cedula_limpia)
+            ws.cell(row=nueva_fila, column=col_nombre_idx, value=nombre_limpio)
+            ws.cell(row=nueva_fila, column=col_fecha_idx, value=fecha_hoy)
+            
+            # Forzamos guardado físico en disco duro
+            wb.save(RUTA_BASE_EQUIPOS_HISTORICO)
+            wb.close()
+            print(f"    [Histórico OK] Registrado exitosamente: {imei_limpio} -> {cedula_limpia} | {nombre_limpio} | {fecha_hoy}")
+
+    except Exception as e:
+        print(f"    [Histórico Error] Error guardando registro: {str(e)}")
+
 
 # ================================================================
 # ACTUALIZACIÓN DEL EXCEL DE ACTAS (hoja principal "base")
 # ================================================================
- 
+
 def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
+
     """
     Actualiza o crea una fila en el Excel de actas basada en la cédula del empleado.
     
@@ -311,6 +452,7 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
     2. Tipo_Logia va a columna 27 (AA)
     3. Cruce por Cargo (Base Fabi) se inyecta en las columnas P, Q y Z según lo solicitado.
     4. Salvaguarda activada: Si cédula no existe en planta, F y H NO se tocan.
+    5. Anterior Usuario se inyecta en columna 28 (AB) obtenido cruzando por IMEI.
     """
     with excel_lock:
         if os.path.exists(EXCEL_PATH):
@@ -323,7 +465,7 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
         cedula_a_buscar = limpiar_cedula(datos.Cedula)
         empleado_encontrado = False
  
-        # === PASO 1: CRUCE CON BASE ALIMENTADORA ===
+        # === PASO 1: CRUCE CON BASE ALIMENTADORA (Por cédula) ===
         info_unidades = procesar_cruce_por_cedula(cedula_a_buscar)
         cruce_exitoso = info_unidades["UN2"] is not None
  
@@ -342,6 +484,9 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
         datos_fabi = obtener_datos_tipologia_fabi(tipo_logia_final)
         falta_cargo_en_base = datos_fabi["Falta_En_Base"]
  
+        # 🎯 === PASO 2.8: EJECUTAR EL TERCER CRUCE (ANTERIOR USUARIO POR IMEI) ===
+        anterior_usuario_data = obtener_anterior_usuario_por_imei(datos.IMEI1)
+
         # === PASO 3: BUSCAR FILA EXISTENTE POR CÉDULA ===
         target_row = None
         if ws.max_row >= 2 and cedula_a_buscar:
@@ -366,10 +511,10 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                     ws.cell(row=row, column=14, value=limpiar_titulo(datos.Funcionario))         # N
                     ws.cell(row=row, column=15, value=limpiar_mayuscula(datos.Bateria))          # O
                     
-                    # 🎯 COLUMNA P (16): Cargo Linea Final de Base Fabi
+                    # COLUMNA P (16): Cargo Linea Final de Base Fabi
                     ws.cell(row=row, column=16, value=datos_fabi["Cargo_Linea_Final"])           # P
                     
-                    # 🎯 COLUMNA Q (17): Tipo Final de Base Fabi
+                    # COLUMNA Q (17): Tipo Final de Base Fabi
                     ws.cell(row=row, column=17, value=datos_fabi["Tipo_Final"])                  # Q
                     
                     ws.cell(row=row, column=18, value=limpiar_mayuscula(datos.TIPOEQUIPO))       # R
@@ -378,21 +523,22 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                     ws.cell(row=row, column=19, value=limpiar_mayuscula(datos.Novedades))        # S
                     print(f"   [Columna S] Novedades guardadas: {datos.Novedades}")
                     
-                    # Columna 20 (T): Se queda quieta tal como la tenías
-                    # ws.cell(row=row, column=20, value=...)
-                    
                     ws.cell(row=row, column=22, value=limpiar_mayuscula(datos.Tipo_Plan))        # V
                     ws.cell(row=row, column=23, value=limpiar_mayuscula(datos.Costo_Plan))       # W
                     ws.cell(row=row, column=24, value=limpiar_mayuscula(datos.Cuenta))           # X
                     ws.cell(row=row, column=25, value=limpiar_mayuscula(datos.Nombre_Cuenta))    # Y
                     
-                    # 🎯 COLUMNA Z (26): Tipo Cargo Final de Base Fabi
+                    # COLUMNA Z (26): Tipo Cargo Final de Base Fabi
                     ws.cell(row=row, column=26, value=datos_fabi["Tipo_Cargo_Final"])            # Z
                     
                     # TIPO_LOGIA EN COLUMNA 27 (AA) - GARANTIZADO
                     ws.cell(row=row, column=27, value=limpiar_mayuscula(tipo_logia_final))       # AA
                     print(f"   [Columna AA] Tipo_Logia guardado: {tipo_logia_final}")
                     
+                    #  COLUMNA 28 (AB): Anterior Usuario obtenido por el cruce por IMEI
+                    ws.cell(row=row, column=28, value=anterior_usuario_data)                     # AB
+                    print(f"   [Columna AB] Anterior Usuario guardado: {anterior_usuario_data}")
+
                     ws.cell(row=row, column=29, value=ruta_pdf)                                  # AC
  
                     # SALVAGUARDA: Solo tocar F y H si cruce fue exitoso
@@ -426,26 +572,26 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
                 info_unidades["C_COSTOS_LARGO"] if cruce_exitoso else "",        # F  (6)
                 fecha_hoy,                                                       # G  (7)
                 info_unidades["UN2"] if cruce_exitoso else "",                   # H  (8)
-                limpiar_mayuscula(datos.UN),                                     # I  (9)                     # I  (9)
+                limpiar_mayuscula(datos.UN),                                     # I  (9)
                 limpiar_titulo(datos.Supervisor),                                # J  (10)
                 limpiar_mayuscula(datos.Zona_o_Cargo),                           # K  (11)
                 limpiar_mayuscula(datos.Codigo),                                 # L  (12)
                 cedula_a_buscar,                                                 # M  (13)
                 limpiar_titulo(datos.Funcionario),                               # N  (14)
                 limpiar_mayuscula(datos.Bateria),                                # O  (15)
-                datos_fabi["Cargo_Linea_Final"],                                 # P  (16) ← CRUCE POR CARGO
-                datos_fabi["Tipo_Final"],                                        # Q  (17) ← CRUCE POR CARGO
+                datos_fabi["Cargo_Linea_Final"],                                 # P  (16)
+                datos_fabi["Tipo_Final"],                                        # Q  (17)
                 limpiar_mayuscula(datos.TIPOEQUIPO),                             # R  (18)
                 limpiar_mayuscula(datos.Novedades),                              # S  (19)
-                "",                                                              # T  (20) ← Quieto / Vacío según tu estructura
+                "",                                                              # T  (20)
                 "",                                                              # U  (21)
                 limpiar_mayuscula(datos.Tipo_Plan),                              # V  (22)
                 limpiar_mayuscula(datos.Costo_Plan),                             # W  (23)
                 limpiar_mayuscula(datos.Cuenta),                                 # X  (24)
                 limpiar_mayuscula(datos.Nombre_Cuenta),                          # Y  (25)
-                datos_fabi["Tipo_Cargo_Final"],                                  # Z  (26) ← CRUCE POR CARGO
+                datos_fabi["Tipo_Cargo_Final"],                                  # Z  (26)
                 limpiar_mayuscula(tipo_logia_final),                             # AA (27)
-                "",                                                              # AB (28)
+                anterior_usuario_data,                                           # AB (28)  ← 🎯 NUEVO: Anterior Usuario por IMEI
                 ruta_pdf,                                                        # AC (29)
             ]
             
@@ -457,8 +603,79 @@ def actualizar_fila_excel_actas(datos: DatosActa, ruta_pdf: str):
         wb.close()
         print(f"    Excel guardado exitosamente")
  
+        #  === PASO 5.5: REGISTRAR ASIGNACIÓN ACTUAL EN LA BASE DE HISTÓRICOS ===
+        # Esto guarda al nuevo dueño para que sirva de "Anterior Usuario" en el futuro
+        registrar_en_base_historicos(
+            imei=datos.IMEI1,
+            cedula=cedula_a_buscar,
+            nombre=datos.Funcionario
+        )
+
         # === PASO 6: RETORNAR SI EL CARGO FALTA EN LA BASE FABI ===
         return falta_cargo_en_base
+    
+# ================================================================
+# FUNCIÓN PARA GUARDAR/REGISTRAR EN LA BASE DE HISTÓRICOS
+# ================================================================
+def registrar_en_base_historicos(imei: str, cedula: str, nombre: str):
+    """
+    Agrega un nuevo registro al final del archivo de históricos
+    con el IMEI, Cédula, Nombre del nuevo usuario y la Fecha de hoy.
+    """
+    if not imei:
+        print("    [Histórico] No se puede registrar: IMEI vacío.")
+        return
+
+    if not os.path.exists(RUTA_BASE_EQUIPOS_HISTORICO):
+        print(f"    [Histórico] Error: No se encontró el archivo de históricos para actualizar: {RUTA_BASE_EQUIPOS_HISTORICO}")
+        return
+
+    try:
+        # Aseguramos bloquear el proceso para que no se pise con otros hilos (usando openpyxl con tu lock)
+        with excel_lock:
+            wb = load_workbook(RUTA_BASE_EQUIPOS_HISTORICO)
+            # Abrimos la primera hoja por defecto (index 0)
+            ws = wb.active 
+            
+            # Formateamos la fecha de hoy para el registro
+            fecha_hoy = date.today().strftime("%d/%m/%Y")
+            
+            # Limpiamos los datos para guardarlos impecables
+            imei_limpio = str(imei).strip()
+            cedula_limpia = str(cedula).strip()
+            nombre_limpio = str(nombre).strip().upper() # Siempre en mayúsculas
+            
+            # Buscamos los índices de las columnas por sus nombres en la primera fila (Cabecera)
+            cabeceras = [str(cell.value).strip() for cell in ws[1]]
+            
+            col_imei_idx = cabeceras.index("IMEI1") + 1 if "IMEI1" in cabeceras else None
+            col_cedula_idx = cabeceras.index("Cedula") + 1 if "Cedula" in cabeceras else None
+            col_nombre_idx = cabeceras.index("Nombre") + 1 if "Nombre" in cabeceras else None
+            col_fecha_idx = cabeceras.index("Fecha") + 1 if "Fecha" in cabeceras else None
+
+            # Si el archivo de históricos no tiene estas columnas exactas, las creamos o usamos por defecto
+            if not all([col_imei_idx, col_cedula_idx, col_nombre_idx, col_fecha_idx]):
+                print("    [Histórico] Advertencia: Las columnas estándar no coinciden. Guardando en orden A, B, C, D.")
+                col_imei_idx, col_cedula_idx, col_nombre_idx, col_fecha_idx = 1, 2, 3, 4
+                
+            # Determinamos la siguiente fila disponible
+            nueva_fila = ws.max_row + 1
+            
+            # Escribimos los datos del nuevo asignado en el histórico
+            ws.cell(row=nueva_fila, column=col_imei_idx, value=imei_limpio)
+            ws.cell(row=nueva_fila, column=col_cedula_idx, value=cedula_limpia)
+            ws.cell(row=nueva_fila, column=col_nombre_idx, value=nombre_limpio)
+            ws.cell(row=nueva_fila, column=col_fecha_idx, value=fecha_hoy)
+            
+            # Guardamos el archivo Excel de históricos
+            wb.save(RUTA_BASE_EQUIPOS_HISTORICO)
+            wb.close()
+            print(f"    [Histórico OK] Se registró nueva asignación: {imei_limpio} -> {cedula_limpia} | {nombre_limpio} | {fecha_hoy}")
+
+    except Exception as e:
+        print(f"    [Histórico Error] No se pudo guardar el registro de histórico: {str(e)}")
+
+
 # ================================================================
 # REGISTRO DE DESCUENTOS (hoja "Descuentos")
 # ================================================================
