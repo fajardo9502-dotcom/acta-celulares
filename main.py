@@ -34,7 +34,7 @@ PDF_FOLDER = "PDFs"
 os.makedirs(PDF_FOLDER, exist_ok=True)
 
 # Lock para escritura thread-safe del Excel
-excel_lock = threading.Lock()
+excel_lock = threading.RLock()
 
 
 # ================================================================
@@ -305,137 +305,79 @@ def generar_nombre_pdf(datos: DatosActa) -> str:
 
 def obtener_anterior_usuario_por_imei(imei_buscado: str) -> str:
     """
-    Busca en la Base de Equipos (Histórico) por 'IMEI1' usando openpyxl para evitar
-    conflictos de caché con Pandas, y retorna los dos últimos usuarios.
+    Busca un IMEI en la Base de Históricos y retorna los últimos 2 usuarios
+    registrados en formato: "USUARIO_VIEJO <--- USUARIO_RECIENTE"
     """
-    if not imei_buscado:
-        return ""
-        
-    if not os.path.exists(RUTA_BASE_EQUIPOS_HISTORICO):
-        print(f"    [Cruce IMEI] Error: No se encontró la base de equipos en: {RUTA_BASE_EQUIPOS_HISTORICO}")
+    if not imei_buscado or not os.path.exists(RUTA_BASE_EQUIPOS_HISTORICO):
         return ""
 
     try:
-        # Usamos openpyxl con el bloqueo para leer el estado exacto en disco
+        # Usamos el candado global para evitar bloqueos
         with excel_lock:
             wb = load_workbook(RUTA_BASE_EQUIPOS_HISTORICO, read_only=True)
-            ws = wb.active
-            
-            # Leer cabeceras para ubicar columnas de forma dinámica
-            cabeceras = [str(cell.value).strip() if cell.value is not None else "" for cell in ws[1]]
-            
-            # Buscamos índices (1-based para openpyxl)
-            def buscar_indice(nombres_posibles):
-                for nombre in nombres_posibles:
-                    for i, cabecera in enumerate(cabeceras):
-                        if cabecera.lower() == nombre.lower():
-                            return i + 1
-                return None
-
-            col_imei_idx = buscar_indice(["imei1", "imei"])
-            col_cedula_idx = buscar_indice(["cedula", "cédula", "documento"])
-            col_nombre_idx = buscar_indice(["nombre", "funcionario", "nombre completo"])
-            col_fecha_idx = buscar_indice(["fecha", "fecha_entrega"])
-
-            # Validación de columnas críticas
-            if not col_imei_idx:
-                print(f"    [Cruce IMEI] Error: No se encontró la columna de IMEI en {cabeceras}")
-                wb.close()
-                return ""
-
-            busqueda = str(imei_buscado).strip()
-            coincidencias = []
-
-            # Recorremos las filas de forma segura
-            for row in range(2, ws.max_row + 1):
-                val_imei = str(ws.cell(row=row, column=col_imei_idx).value or "").strip()
-                if val_imei == busqueda:
-                    cedula = str(ws.cell(row=row, column=col_cedula_idx).value or "").strip() if col_cedula_idx else ""
-                    nombre = str(ws.cell(row=row, column=col_nombre_idx).value or "").strip() if col_nombre_idx else ""
-                    fecha = str(ws.cell(row=row, column=col_fecha_idx).value or "").strip() if col_fecha_idx else ""
-
-                    # Evitar nulos de excel
-                    cedula = "" if cedula.lower() in ("nan", "none") else cedula
-                    nombre = "" if nombre.lower() in ("nan", "none") else nombre.upper()
-                    fecha = "" if fecha.lower() in ("nan", "none") else fecha
-
-                    if cedula or nombre:
-                        coincidencias.append(f"{cedula} | {nombre} | {fecha}")
-
-            wb.close()
-
-            if coincidencias:
-                # Tomamos las últimas dos coincidencias reales del archivo
-                ultimas_dos = coincidencias[-2:] if len(coincidencias) >= 2 else coincidencias
+            try:
+                ws = wb.active
                 
-                if len(ultimas_dos) == 2:
-                    historial_doble = f"{ultimas_dos[0]}  <---  {ultimas_dos[1]}"
-                    print(f"    [Cruce IMEI OK] Encontrado historial doble: {historial_doble}")
-                    return historial_doble
-                else:
-                    print(f"    [Cruce IMEI OK] Encontrado único dueño previo: {ultimas_dos[0]}")
-                    return ultimas_dos[0]
-            else:
-                print(f"    [Cruce IMEI] IMEI '{busqueda}' no tiene registros previos en histórico.")
+                # Obtenemos las cabeceras de la fila 1
+                cabeceras = [str(cell.value).strip() if cell.value is not None else "" for cell in ws[1]]
+                
+                def buscar_indice(nombres_posibles):
+                    for nombre in nombres_posibles:
+                        for i, cabecera in enumerate(cabeceras):
+                            if cabecera.lower() == nombre.lower():
+                                return i + 1
+                    return None
+
+                # Mapeo dinámico de columnas por nombre
+                col_imei_idx = buscar_indice(["imei1", "imei"])
+                col_cedula_idx = buscar_indice(["cedula", "cédula", "documento"])
+                col_nombre_idx = buscar_indice(["nombre", "funcionario", "nombre completo"])
+                col_fecha_idx = buscar_indice(["fecha", "fecha_entrega"])
+
+                if not col_imei_idx:
+                    print(f"   [Cruce IMEI Error] No se encontró columna IMEI en {cabeceras}")
+                    return ""
+
+                busqueda = str(imei_buscado).strip()
+                coincidencias = []
+
+                # Recorremos todas las filas buscando el IMEI
+                for row in range(2, ws.max_row + 1):
+                    val_imei = str(ws.cell(row=row, column=col_imei_idx).value or "").strip()
+                    
+                    if val_imei == busqueda:
+                        cedula = str(ws.cell(row=row, column=col_cedula_idx).value or "").strip() if col_cedula_idx else ""
+                        nombre = str(ws.cell(row=row, column=col_nombre_idx).value or "").strip() if col_nombre_idx else ""
+                        fecha = str(ws.cell(row=row, column=col_fecha_idx).value or "").strip() if col_fecha_idx else ""
+
+                        # Limpieza de valores nulos o "nan"
+                        cedula = "" if cedula.lower() in ("nan", "none") else cedula
+                        nombre = "" if nombre.lower() in ("nan", "none") else nombre.upper()
+                        fecha = "" if fecha.lower() in ("nan", "none") else fecha
+
+                        if cedula or nombre:
+                            coincidencias.append(f"{cedula} | {nombre} | {fecha}")
+
+                # Si encontramos registros previos
+                if coincidencias:
+                    # '[-2:]' extrae exactamente los 2 últimos elementos del arreglo
+                    ultimas_dos = coincidencias[-2:]
+                    
+                    if len(ultimas_dos) == 2:
+                        historial_formateado = f"{ultimas_dos[0]}  <---  {ultimas_dos[1]}"
+                    else:
+                        historial_formateado = ultimas_dos[0]
+                    
+                    print(f"   [Histórico OK] Registros encontrados: {historial_formateado}")
+                    return historial_formateado
+                
                 return ""
-
+            finally:
+                wb.close()
+                
     except Exception as e:
-        print(f"    Error crítico leyendo histórico con openpyxl: {str(e)}")
+        print(f"   Error leyendo histórico para IMEI {imei_buscado}: {str(e)}")
         return ""
-
-
-def registrar_en_base_historicos(imei: str, cedula: str, nombre: str):
-    """
-    Agrega una nueva fila garantizando el guardado inmediato en disco.
-    """
-    if not imei:
-        return
-
-    if not os.path.exists(RUTA_BASE_EQUIPOS_HISTORICO):
-        print(f"    [Histórico] Error: Archivo no existe en: {RUTA_BASE_EQUIPOS_HISTORICO}")
-        return
-
-    try:
-        with excel_lock:
-            wb = load_workbook(RUTA_BASE_EQUIPOS_HISTORICO)
-            ws = wb.active 
-            
-            fecha_hoy = date.today().strftime("%d/%m/%Y")
-            
-            imei_limpio = str(imei).strip()
-            cedula_limpia = str(cedula).strip()
-            nombre_limpio = str(nombre).strip().upper()
-            
-            # Mapeamos dinámicamente las cabeceras existentes
-            cabeceras = [str(cell.value).strip() if cell.value is not None else "" for cell in ws[1]]
-            
-            def buscar_indice(nombres_posibles, default_col):
-                for nombre in nombres_posibles:
-                    for i, cabecera in enumerate(cabeceras):
-                        if cabecera.lower() == nombre.lower():
-                            return i + 1
-                return default_col
-
-            col_imei_idx = buscar_indice(["imei1", "imei"], 1)
-            col_cedula_idx = buscar_indice(["cedula", "cédula", "documento"], 2)
-            col_nombre_idx = buscar_indice(["nombre", "funcionario", "nombre completo"], 3)
-            col_fecha_idx = buscar_indice(["fecha", "fecha_entrega"], 4)
-            
-            nueva_fila = ws.max_row + 1
-            
-            # Escribir los datos
-            ws.cell(row=nueva_fila, column=col_imei_idx, value=imei_limpio)
-            ws.cell(row=nueva_fila, column=col_cedula_idx, value=cedula_limpia)
-            ws.cell(row=nueva_fila, column=col_nombre_idx, value=nombre_limpio)
-            ws.cell(row=nueva_fila, column=col_fecha_idx, value=fecha_hoy)
-            
-            # Forzamos guardado físico en disco duro
-            wb.save(RUTA_BASE_EQUIPOS_HISTORICO)
-            wb.close()
-            print(f"    [Histórico OK] Registrado exitosamente: {imei_limpio} -> {cedula_limpia} | {nombre_limpio} | {fecha_hoy}")
-
-    except Exception as e:
-        print(f"    [Histórico Error] Error guardando registro: {str(e)}")
 
 
 # ================================================================
