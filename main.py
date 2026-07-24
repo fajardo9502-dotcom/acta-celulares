@@ -2,6 +2,9 @@
 import base64
 import os
 import threading
+import smtplib
+from email.message import EmailMessage
+
 from datetime import date
 from typing import Optional
 
@@ -11,7 +14,7 @@ from openpyxl import Workbook, load_workbook
 from pydantic import BaseModel
 
 # FastAPI
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException , BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -35,6 +38,13 @@ os.makedirs(PDF_FOLDER, exist_ok=True)
 
 # Lock para escritura thread-safe del Excel
 excel_lock = threading.RLock()
+
+# --- CONFIGURACIÓN DE CORREO (Office 365) ---
+EMAIL_REMITENTE = os.getenv("EMAIL_REMITENTE")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+EMAIL_DESTINATARIO_DEFAULT = os.getenv("EMAIL_DESTINATARIO_DEFAULT", "")
+SMTP_SERVIDOR = "smtp.office365.com"
+SMTP_PUERTO = 587
 
 
 # ================================================================
